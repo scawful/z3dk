@@ -65,3 +65,6 @@ __pycache__/
 
 # mdbook's output directory
 /docs/newbook/book/
+
+# Node
+node_modules/

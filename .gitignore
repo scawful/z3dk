@@ -68,3 +68,12 @@ __pycache__/
 
 # Node
 node_modules/
+
+# AFS context (local only - use afs CLI or manual tools to search)
+.context/
+
+# macOS
+.DS_Store
+
+# Build directories
+build-*/

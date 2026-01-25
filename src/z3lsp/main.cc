@@ -15,6 +15,7 @@
 #include "nlohmann/json.hpp"
 #include "z3dk_core/assembler.h"
 #include "z3dk_core/config.h"
+#include "z3dk_core/opcode_descriptions.h"
 #include "z3dk_core/opcode_table.h"
 
 namespace fs = std::filesystem;
@@ -855,21 +856,55 @@ std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
     return json(nullptr);
   }
 
+  // Check if token is a label
   auto label_it = std::find_if(doc.labels.begin(), doc.labels.end(),
                                [&](const z3dk::Label& label) {
                                  return label.name == *token;
                                });
-  if (label_it == doc.labels.end()) {
-    return json(nullptr);
+  if (label_it != doc.labels.end()) {
+    std::ostringstream hover_text;
+    hover_text << label_it->name << " = $" << std::hex << std::uppercase
+               << label_it->address;
+    json hover;
+    hover["contents"] = { {"kind", "plaintext"}, {"value", hover_text.str()} };
+    return hover;
   }
 
-  std::ostringstream hover_text;
-  hover_text << label_it->name << " = $" << std::hex << std::uppercase
-             << label_it->address;
+  // Check if token is a 65816 opcode
+  std::string upper_token = *token;
+  for (char& c : upper_token) c = std::toupper(c);
 
-  json hover;
-  hover["contents"] = { {"kind", "plaintext"}, {"value", hover_text.str()} };
-  return hover;
+  const auto& opcode_descs = z3dk::GetOpcodeDescriptions();
+  auto opcode_it = opcode_descs.find(upper_token);
+  if (opcode_it != opcode_descs.end()) {
+    const auto& desc = opcode_it->second;
+    std::ostringstream hover_text;
+    hover_text << "**" << upper_token << "** - " << desc.full_name << "\n\n";
+    hover_text << desc.description << "\n\n";
+    hover_text << "**Flags:** " << desc.flags_affected;
+
+    json hover;
+    hover["contents"] = { {"kind", "markdown"}, {"value", hover_text.str()} };
+    return hover;
+  }
+
+  // Check if token is a define
+  auto define_it = std::find_if(doc.defines.begin(), doc.defines.end(),
+                                [&](const z3dk::Define& def) {
+                                  return def.name == *token;
+                                });
+  if (define_it != doc.defines.end()) {
+    std::ostringstream hover_text;
+    hover_text << "!" << define_it->name;
+    if (!define_it->value.empty()) {
+      hover_text << " = " << define_it->value;
+    }
+    json hover;
+    hover["contents"] = { {"kind", "plaintext"}, {"value", hover_text.str()} };
+    return hover;
+  }
+
+  return json(nullptr);
 }
 
 json BuildCompletionItems(const DocumentState& doc, const std::string& prefix) {

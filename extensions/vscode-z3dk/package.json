@@ -9,6 +9,7 @@
   },
   "categories": ["Programming Languages", "Other"],
   "activationEvents": [
+    "onStartupFinished",
     "onLanguage:asar",
     "onView:z3dk.commands",
     "onView:z3dk.dashboard",

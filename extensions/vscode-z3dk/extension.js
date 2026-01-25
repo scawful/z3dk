@@ -1228,6 +1228,7 @@ function buildExportSymbolsCommand(config) {
 function activate(context) {
   extensionContext = context;
   ensureOutputChannel();
+  ensureOutputChannel().appendLine('Z3DK extension activated.');
   commandProvider = new Z3dkCommandProvider(context);
   context.subscriptions.push(vscode.window.registerTreeDataProvider('z3dk.commands', commandProvider));
   dashboardProvider = new Z3dkDashboardProvider(context);

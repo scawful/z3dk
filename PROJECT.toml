@@ -1,0 +1,14 @@
+name = "zAsar"
+description = "SNES assembler (65c816, SPC700, Super FX) for ROM patches and homebrew"
+tags = ["game-dev", "romhacking", "snes", "assembler", "c++"]
+platforms = ["mac", "linux", "windows"]
+stage = "production"
+is_product = false
+public = true
+
+[links]
+github = "https://github.com/scawful/zAsar"
+
+[build]
+system = "cmake"
+command = "cmake src && make"

@@ -3,6 +3,61 @@
 
 Asar is an SNES assembler designed for applying patches to existing ROM images, or creating new ROM images from scratch. It supports 65c816, SPC700, and Super FX architectures. It was originally created by Alcaro, modelled after [xkas v0.06](https://www.romhacking.net/utilities/269/) by byuu.
 
+## Z3DK Extensions
+This fork is evolving into **Z3DK** (Zelda 3 Development Kit). The key additions are:
+- **z3asm**: Asar-compatible CLI with Z3DK config + structured outputs.
+- **z3disasm**: ROM disassembler that emits usdasm-style bank files.
+- **z3lsp**: Language Server Protocol (LSP) server for editors.
+- **libz3dk-core**: C++ API for in-memory assembly, diagnostics, labels, and source maps.
+
+### z3dk.toml (Config)
+Create a `z3dk.toml` next to your ASM to define includes/defines:
+```
+include_paths = ["./", "src", "include"]
+defines = ["DEBUG=1", "ENABLE_FEATURE"]
+rom_size = 0x200000
+mapper = "lorom"  # available as !z3dk_mapper define
+symbols = "wla"   # none|wla|nocash
+symbols_path = "build/z3dk.sym"
+emit = ["diagnostics.json", "sourcemap.json", "symbols.mlb"]
+```
+
+### Structured Outputs
+```
+z3asm my_patch.asm rom.sfc --emit=diagnostics.json --emit=sourcemap.json
+z3asm my_patch.asm rom.sfc --emit=symbols.mlb
+z3asm my_patch.asm rom.sfc --emit=lint.json
+z3asm my_patch.asm rom.sfc --emit=hooks.json
+z3asm my_patch.asm rom.sfc --emit=lint:/tmp/project_lint.json
+```
+
+### Disassembler (usdasm-style)
+```
+z3disasm --rom rom.sfc --symbols symbols.mlb --out disasm/
+```
+
+Optional hook annotations:
+- Provide a `hooks.json` manifest; format documented in `docs/Z3DK_HOOKS.md`.
+- `z3disasm --hooks` with no path auto-loads `hooks.json` next to the ROM when present.
+
+### Lint Options
+```
+z3asm my_patch.asm rom.sfc --emit=lint.json --lint-m-width=16 --lint-x-width=16
+z3asm my_patch.asm rom.sfc --emit=lint.json --lint-no-unknown-width
+z3asm my_patch.asm rom.sfc --emit=lint.json --lint-no-branch --lint-no-org
+```
+
+### Editor Integration
+- **VS Code**: use the repo extension at `extensions/vscode-z3dk` (Asar grammar + z3lsp).
+  - Dev mode: `code --extensionDevelopmentPath=~/src/hobby/z3dk/extensions/vscode-z3dk`
+  - Set `z3dk.serverPath` if z3lsp is not on PATH.
+- **Emacs/Spacemacs** (eglot): `(add-to-list 'eglot-server-programs '(asm-mode . ("z3lsp")))`
+- **Neovim** (lspconfig): `cmd = {"z3lsp"}`
+
+### Emulator Integration
+- **yaze**: use `--symbols=wla` (default `.sym` output) or `--emit=symbols-wla:<path>` and point yaze to the `.sym` file.
+- **Mesen2 (mesen2-oos)**: use `--emit=symbols-mlb:<path>` (or `--emit=symbols.mlb`) for debugger labels.
+
 For a guide on using Asar (including how to write patches), see [`README.txt`](https://github.com/RPGHacker/asar/blob/master/README.txt). This readme was made with tool programmers and contributors in mind.
 
 ## Building
@@ -32,9 +87,9 @@ to be able to include the header files. It is also recommended to turn off every
   (You can view an online version of the manual [here](https://rpghacker.github.io/asar/manual/) and an online version of the changelog [here](https://rpghacker.github.io/asar/changelog/)).
 * `ext` contains syntax highlighting files for Notepad++ and Sublime Text
 * `src`
-  * `asar` contains the source code of the main app and DLL
-  * `asar-tests` contains code for the testing application (both the app test and DLL test)
-  * `asar-dll-bindings` contains bindings of the Asar DLL to other languages (currently C/C++, C# and Python)
+  * `z3asm` contains the source code of the main app and DLL
+  * `tests` contains code for the testing application (both the app test and DLL test)
+  * `bindings` contains bindings of the Asar DLL to other languages (currently C/C++, C# and Python)
 * `tests` contains tests to verify Asar works correctly
 
 ## Test format

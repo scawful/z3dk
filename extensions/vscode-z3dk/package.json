@@ -27,6 +27,13 @@
     "onCommand:z3dk.openOracleRepo",
     "onCommand:z3dk.openYazeRepo",
     "onCommand:z3dk.openMesenRepo",
+    "onCommand:z3dk.openDashboard",
+    "onCommand:z3dk.launchMesen",
+    "onCommand:z3dk.launchYaze",
+    "onCommand:z3dk.openRomFolder",
+    "onCommand:z3dk.openUsdasmRoot",
+    "onCommand:z3dk.findUsdasmLabel",
+    "onCommand:z3dk.exportDisassembly",
     "onCommand:z3dk.refresh",
     "onCommand:z3dk.refreshDashboard"
   ],
@@ -103,6 +110,10 @@
         "title": "Z3DK: Restart Language Server"
       },
       {
+        "command": "z3dk.openDashboard",
+        "title": "Z3DK: Dashboard"
+      },
+      {
         "command": "z3dk.openOracleRepo",
         "title": "Z3DK: Open Oracle Repo"
       },
@@ -113,6 +124,30 @@
       {
         "command": "z3dk.openMesenRepo",
         "title": "Z3DK: Open Mesen2-OOS Repo"
+      },
+      {
+        "command": "z3dk.launchMesen",
+        "title": "Z3DK: Mesen2-OOS"
+      },
+      {
+        "command": "z3dk.launchYaze",
+        "title": "Z3DK: yaze"
+      },
+      {
+        "command": "z3dk.openRomFolder",
+        "title": "Z3DK: ROM Folder"
+      },
+      {
+        "command": "z3dk.openUsdasmRoot",
+        "title": "Z3DK: USDASM Root"
+      },
+      {
+        "command": "z3dk.findUsdasmLabel",
+        "title": "Z3DK: USDASM Search"
+      },
+      {
+        "command": "z3dk.exportDisassembly",
+        "title": "Z3DK: Hack Disasm"
       },
       {
         "command": "z3dk.refresh",
@@ -167,6 +202,10 @@
           "group": "1_general"
         },
         {
+          "command": "z3dk.openDashboard",
+          "group": "1_general"
+        },
+        {
           "command": "z3dk.openModelCatalog",
           "group": "2_resources"
         },
@@ -187,38 +226,67 @@
           "group": "2_resources"
         },
         {
+          "command": "z3dk.openRomFolder",
+          "group": "3_emulator"
+        },
+        {
+          "command": "z3dk.launchMesen",
+          "group": "3_emulator"
+        },
+        {
+          "command": "z3dk.launchYaze",
+          "group": "3_emulator"
+        },
+        {
+          "command": "z3dk.exportDisassembly",
+          "group": "4_disasm"
+        },
+        {
+          "command": "z3dk.findUsdasmLabel",
+          "group": "4_disasm"
+        },
+        {
+          "command": "z3dk.openUsdasmRoot",
+          "group": "4_disasm"
+        },
+        {
           "command": "z3dk.build",
-          "group": "3_actions"
+          "group": "5_actions"
         },
         {
           "command": "z3dk.runTests",
-          "group": "3_actions"
+          "group": "5_actions"
         },
         {
           "command": "z3dk.exportSymbols",
-          "group": "3_actions"
+          "group": "5_actions"
         },
         {
           "command": "z3dk.restartServer",
-          "group": "4_server"
+          "group": "6_server"
         },
         {
           "command": "z3dk.openOracleRepo",
-          "group": "5_repos"
+          "group": "7_repos"
         },
         {
           "command": "z3dk.openYazeRepo",
-          "group": "5_repos"
+          "group": "7_repos"
         },
         {
           "command": "z3dk.openMesenRepo",
-          "group": "5_repos"
+          "group": "7_repos"
         }
       ],
       "view/title": [
         {
           "command": "z3dk.refresh",
           "when": "view == z3dk.commands",
+          "group": "navigation"
+        },
+        {
+          "command": "z3dk.refreshDashboard",
+          "when": "view == z3dk.dashboard",
           "group": "navigation"
         }
       ]
@@ -265,6 +333,43 @@
           "type": "string",
           "default": "",
           "description": "Path to mesen2-oos repo (used for integrations)."
+        },
+        "z3dk.mesenPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Mesen2-OOS executable or .app bundle."
+        },
+        "z3dk.mesenArgs": {
+          "type": "array",
+          "default": [],
+          "items": {"type": "string"},
+          "description": "Arguments for launching Mesen2-OOS (supports ${rom} and ${symbols})."
+        },
+        "z3dk.yazeLaunchArgs": {
+          "type": "array",
+          "default": [],
+          "items": {"type": "string"},
+          "description": "Arguments for launching yaze (supports ${rom} and ${symbols})."
+        },
+        "z3dk.usdasmRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the USDASM source-of-truth disassembly."
+        },
+        "z3dk.usdasmGlob": {
+          "type": "string",
+          "default": "**/*.asm,**/*.inc,**/*.s,**/*.a65",
+          "description": "Glob for searching USDASM labels."
+        },
+        "z3dk.disasmCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Command to export a USDASM-style disassembly (supports ${rom}, ${symbols}, ${output}, ${usdasm})."
+        },
+        "z3dk.disasmOutputPath": {
+          "type": "string",
+          "default": "",
+          "description": "Output path for exported disassembly artifacts."
         },
         "z3dk.autoStart": {
           "type": "boolean",

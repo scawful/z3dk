@@ -10,6 +10,7 @@ let terminal;
 let commandProvider;
 let dashboardProvider;
 let statusItems = [];
+let extensionContext;
 
 function workspaceRoot() {
   const folders = vscode.workspace.workspaceFolders;
@@ -28,13 +29,19 @@ function findWorkspaceFolder(name) {
 }
 
 function expandHome(inputPath) {
-  if (!inputPath) {
+  if (!inputPath || typeof inputPath !== 'string') {
     return inputPath;
   }
-  if (inputPath.startsWith('~')) {
-    return path.join(os.homedir(), inputPath.slice(1));
+  let output = inputPath;
+  const root = workspaceRoot();
+  if (root) {
+    output = output.replace(/\$\{workspaceFolder\}/g, root);
+    output = output.replace(/\$\{workspaceRoot\}/g, root);
   }
-  return inputPath;
+  if (output.startsWith('~')) {
+    return path.join(os.homedir(), output.slice(1));
+  }
+  return output;
 }
 
 function workspaceSibling(name) {
@@ -111,7 +118,7 @@ function resolveContinueConfigTsPath(config) {
 }
 
 function resolveServerPath(config, rootDir) {
-  const explicit = config.get('serverPath');
+  const explicit = expandHome(config.get('serverPath'));
   if (explicit) {
     return explicit;
   }
@@ -139,6 +146,28 @@ function resolveServerPath(config, rootDir) {
   }
 
   return 'z3lsp';
+}
+
+function resolveDisasmExecutable(rootDir) {
+  if (!rootDir) {
+    return '';
+  }
+  const candidates = [
+    path.join(rootDir, 'build', 'z3disasm', 'z3disasm'),
+    path.join(rootDir, 'build', 'src', 'z3disasm', 'z3disasm'),
+    path.join(rootDir, 'build-z3dk-foundation', 'z3disasm', 'z3disasm'),
+    path.join(rootDir, 'build-z3dk-foundation', 'src', 'z3disasm', 'z3disasm'),
+    path.join(rootDir, 'build-z3dk-asan', 'z3disasm', 'z3disasm'),
+    path.join(rootDir, 'build-z3dk-asan', 'src', 'z3disasm', 'z3disasm'),
+    path.join(rootDir, 'build', 'bin', 'z3disasm'),
+    path.join(rootDir, 'build-z3dk-foundation', 'bin', 'z3disasm')
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return '';
 }
 
 function ensureOutputChannel() {
@@ -260,7 +289,8 @@ function buildLaunchCommand(executable, args) {
   if (expanded.endsWith('.app')) {
     return `open -a "${expanded}"${quotedArgs ? ` --args ${quotedArgs}` : ''}`;
   }
-  return `${expanded}${quotedArgs ? ` ${quotedArgs}` : ''}`;
+  const escapedExecutable = expanded.includes(' ') ? `"${expanded}"` : expanded;
+  return `${escapedExecutable}${quotedArgs ? ` ${quotedArgs}` : ''}`;
 }
 
 function resolveUsdasmRoot(config) {
@@ -281,24 +311,67 @@ function resolveUsdasmRoot(config) {
       return sibling;
     }
   }
+  const root = workspaceRoot();
+  if (root) {
+    const gigaleakPath = path.join(path.dirname(root), 'alttp-gigaleak', 'DISASM', 'usdasm');
+    if (fs.existsSync(gigaleakPath)) {
+      return gigaleakPath;
+    }
+  }
   return '';
 }
 
-function buildDisassemblyCommand(config) {
-  const command = config.get('disasmCommand');
-  if (!command) {
+function resolveMesenExecutable(config) {
+  const configured = expandHome(config.get('mesenPath'));
+  if (configured) {
+    return configured;
+  }
+  const mesenRoot = resolveRepoPath('mesen2-oos', 'mesenRoot', config);
+  if (!mesenRoot) {
     return '';
   }
+  const candidates = [
+    'Mesen2.app',
+    'Mesen2-OOS.app',
+    'Mesen.app',
+    path.join('build', 'Mesen2.app'),
+    path.join('build', 'Mesen2-OOS.app'),
+    path.join('build', 'Mesen.app')
+  ];
+  for (const candidate of candidates) {
+    const fullPath = path.join(mesenRoot, candidate);
+    if (fs.existsSync(fullPath)) {
+      return fullPath;
+    }
+  }
+  return '';
+}
+
+function buildDisassemblyCommand(config, context) {
   const romPath = expandHome(config.get('romPath')) || '';
   const symbolsPath = resolveSymbolsPath(config, romPath);
   const outputPath = expandHome(config.get('disasmOutputPath')) || '';
   const usdasmRoot = resolveUsdasmRoot(config);
-  return applyTemplate(command, {
-    rom: romPath,
-    symbols: symbolsPath,
-    output: outputPath,
-    usdasm: usdasmRoot
-  });
+  const command = config.get('disasmCommand');
+  if (command) {
+    return applyTemplate(command, {
+      rom: romPath,
+      symbols: symbolsPath,
+      output: outputPath,
+      usdasm: usdasmRoot
+    });
+  }
+  const rootDir = z3dkRoot(context) || workspaceRoot();
+  const disasmExe = resolveDisasmExecutable(rootDir);
+  if (!disasmExe || !romPath) {
+    return '';
+  }
+  const fallbackOut = outputPath || (rootDir ? path.join(rootDir, '.cache', 'z3disasm') : '');
+  const args = ['--rom', romPath, '--out', fallbackOut];
+  if (symbolsPath) {
+    args.push('--symbols', symbolsPath);
+  }
+  return buildLaunchCommand(disasmExe, args);
 }
 
 function ensureStatusBar(context) {
@@ -328,7 +401,7 @@ function updateStatusBar(context) {
   const config = vscode.workspace.getConfiguration('z3dk');
   const romPath = expandHome(config.get('romPath')) || '';
   const symbolsPath = resolveSymbolsPath(config, romPath);
-  const mesenPath = expandHome(config.get('mesenPath')) || '';
+  const mesenPath = resolveMesenExecutable(config);
   const yazePath = expandHome(config.get('yazePath')) || '';
   const lspLabel = client ? 'on' : 'off';
 
@@ -359,18 +432,20 @@ function updateStatusBar(context) {
   }
   symbols.show();
 
+  const mesenStatus = pathStatus(mesenPath);
   if (mesenPath) {
-    mesen.text = `$(debug-alt-small) Mesen2: ${fs.existsSync(mesenPath) ? 'ready' : 'missing'}`;
-    mesen.tooltip = mesenPath;
+    mesen.text = `$(debug-alt-small) Mesen2: ${mesenStatus.exists ? 'ready' : 'missing'}`;
+    mesen.tooltip = mesenStatus.value;
   } else {
     mesen.text = '$(debug-alt-small) Mesen2: unset';
     mesen.tooltip = 'Set z3dk.mesenPath';
   }
   mesen.show();
 
+  const yazeStatus = pathStatus(yazePath);
   if (yazePath) {
-    yaze.text = `$(rocket) yaze: ${fs.existsSync(yazePath) ? 'ready' : 'missing'}`;
-    yaze.tooltip = yazePath;
+    yaze.text = `$(rocket) yaze: ${yazeStatus.exists ? 'ready' : 'missing'}`;
+    yaze.tooltip = yazeStatus.value;
   } else {
     yaze.text = '$(rocket) yaze: unset';
     yaze.tooltip = 'Set z3dk.yazePath';
@@ -418,6 +493,12 @@ class Z3dkCommandProvider {
         { command: 'z3dk.openWorkspace', title: 'Open Dev Workspace' },
         'Open the multi-root workspace for Oracle + Yaze + Z3DK',
         'file-directory'
+      ),
+      new CommandItem(
+        'Open Dashboard',
+        { command: 'z3dk.openDashboard', title: 'Open Dashboard' },
+        'Open the Z3DK dashboard view',
+        'layout'
       ),
       new CommandItem(
         'Open Z3DK README',
@@ -480,6 +561,42 @@ class Z3dkCommandProvider {
         'database'
       ),
       new CommandItem(
+        'Mesen2-OOS',
+        { command: 'z3dk.launchMesen', title: 'Mesen2-OOS' },
+        'Launch Mesen2-OOS with optional ROM args',
+        'debug-alt-small'
+      ),
+      new CommandItem(
+        'yaze',
+        { command: 'z3dk.launchYaze', title: 'yaze' },
+        'Launch yaze with optional ROM args',
+        'rocket'
+      ),
+      new CommandItem(
+        'Export Hack Disassembly',
+        { command: 'z3dk.exportDisassembly', title: 'Export Hack Disassembly' },
+        'Export USDASM-style disassembly of the hack',
+        'symbol-structure'
+      ),
+      new CommandItem(
+        'Find USDASM Label',
+        { command: 'z3dk.findUsdasmLabel', title: 'Find USDASM Label' },
+        'Search USDASM for a label',
+        'search'
+      ),
+      new CommandItem(
+        'Open USDASM Root',
+        { command: 'z3dk.openUsdasmRoot', title: 'Open USDASM Root' },
+        'Open USDASM source-of-truth disassembly',
+        'folder'
+      ),
+      new CommandItem(
+        'Open ROM Folder',
+        { command: 'z3dk.openRomFolder', title: 'Open ROM Folder' },
+        'Reveal ROM folder in Explorer',
+        'file-submodule'
+      ),
+      new CommandItem(
         'Restart Language Server',
         { command: 'z3dk.restartServer', title: 'Restart Language Server' },
         'Restart z3lsp',
@@ -514,6 +631,7 @@ class Z3dkDashboardProvider {
         'z3dk.exportSymbols',
         'z3dk.restartServer',
         'z3dk.refreshDashboard',
+        'z3dk.openDashboard',
         'z3dk.openModelCatalog',
         'z3dk.openModelPortfolio',
         'z3dk.openContinueConfig',
@@ -522,7 +640,13 @@ class Z3dkDashboardProvider {
         'z3dk.addAfsContexts',
         'z3dk.openOracleRepo',
         'z3dk.openYazeRepo',
-        'z3dk.openMesenRepo'
+        'z3dk.openMesenRepo',
+        'z3dk.openUsdasmRoot',
+        'z3dk.findUsdasmLabel',
+        'z3dk.exportDisassembly',
+        'z3dk.launchMesen',
+        'z3dk.launchYaze',
+        'z3dk.openRomFolder'
       ]);
       if (allowed.has(message.command)) {
         vscode.commands.executeCommand(message.command);
@@ -555,6 +679,9 @@ function buildDashboardHtml(context) {
   const oracleRoot = resolveRepoPath('oracle-of-secrets', 'oracleRoot', config);
   const yazeRoot = resolveRepoPath('yaze', 'yazeRoot', config);
   const mesenRoot = resolveRepoPath('mesen2-oos', 'mesenRoot', config);
+  const mesenPath = resolveMesenExecutable(config);
+  const usdasmRoot = resolveUsdasmRoot(config);
+  const disasmOutputPath = expandHome(config.get('disasmOutputPath')) || '';
   const z3dkRootPath = z3dkRoot(context);
   const afsScratchpad = z3dkRootPath
     ? path.join(z3dkRootPath, '.context', 'scratchpad', 'state.md')
@@ -565,15 +692,20 @@ function buildDashboardHtml(context) {
     { label: 'yaze', ...pathStatus(yazePath) },
     { label: 'rom', ...pathStatus(romPath) },
     { label: 'symbols', ...pathStatus(symbolsPath) },
-    { label: 'mesen2-oos', ...pathStatus(mesenRoot) }
+    { label: 'mesen2 app', ...pathStatus(mesenPath) },
+    { label: 'usdasm', ...pathStatus(usdasmRoot) }
   ];
 
   const docLinks = [
     { label: 'Model Catalog', path: modelCatalogPath },
     { label: 'Model Portfolio', path: modelPortfolioPath },
     { label: 'AFS Scratchpad', path: afsScratchpad },
+    { label: 'Oracle Repo', path: oracleRoot },
+    { label: 'Yaze Repo', path: yazeRoot },
+    { label: 'Mesen2 Repo', path: mesenRoot },
     { label: 'Continue config.yaml', path: continueConfigPath },
-    { label: 'Continue config.ts', path: continueConfigTsPath }
+    { label: 'Continue config.ts', path: continueConfigTsPath },
+    { label: 'Disasm Output', path: disasmOutputPath }
   ];
 
   const statusRows = statuses
@@ -604,7 +736,8 @@ function buildDashboardHtml(context) {
 
   const infoBadges = [
     'asar-first',
-    devWorkspacePath ? 'workspace linked' : 'workspace unset'
+    devWorkspacePath ? 'workspace linked' : 'workspace unset',
+    usdasmRoot ? 'usdasm linked' : 'usdasm unset'
   ];
 
   return `
@@ -638,6 +771,41 @@ function buildDashboardHtml(context) {
           min-height: 100vh;
         }
 
+        body::before {
+          content: "";
+          position: fixed;
+          inset: 0;
+          background-image: linear-gradient(rgba(26, 26, 26, 0.04) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(26, 26, 26, 0.04) 1px, transparent 1px);
+          background-size: 28px 28px;
+          opacity: 0.5;
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        body::after {
+          content: "";
+          position: fixed;
+          inset: -20% -10%;
+          background: radial-gradient(circle at 20% 30%, rgba(42, 127, 111, 0.2), transparent 40%),
+            radial-gradient(circle at 80% 60%, rgba(208, 122, 45, 0.18), transparent 45%),
+            radial-gradient(circle at 50% 80%, rgba(62, 111, 176, 0.14), transparent 50%);
+          opacity: 0.8;
+          filter: blur(10px);
+          animation: drift 18s ease-in-out infinite;
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        @keyframes drift {
+          0%, 100% {
+            transform: translate3d(0, 0, 0);
+          }
+          50% {
+            transform: translate3d(10px, -16px, 0);
+          }
+        }
+
         .hero {
           position: relative;
           padding: 18px 16px 20px;
@@ -646,6 +814,15 @@ function buildDashboardHtml(context) {
           border: 1px solid var(--border);
           box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
           overflow: hidden;
+          z-index: 1;
+        }
+
+        .hero::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(120deg, rgba(42, 127, 111, 0.08), transparent 60%);
+          pointer-events: none;
         }
 
         .hero::after {
@@ -696,6 +873,8 @@ function buildDashboardHtml(context) {
           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: 14px;
           margin-top: 16px;
+          position: relative;
+          z-index: 1;
         }
 
         .card {
@@ -704,6 +883,25 @@ function buildDashboardHtml(context) {
           background: var(--card);
           border: 1px solid var(--border);
           box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .card::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: 16px;
+          border: 1px dashed rgba(26, 26, 26, 0.08);
+          pointer-events: none;
+        }
+
+        .card .accent-line {
+          height: 3px;
+          width: 46px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, rgba(42, 127, 111, 0.8), rgba(208, 122, 45, 0.6));
+          margin-bottom: 10px;
         }
 
         .card h2 {
@@ -811,6 +1009,12 @@ function buildDashboardHtml(context) {
           font-size: 11px;
           color: rgba(26, 26, 26, 0.55);
         }
+
+        .mini {
+          font-size: 10.5px;
+          color: rgba(26, 26, 26, 0.6);
+          margin-top: 8px;
+        }
       </style>
     </head>
     <body>
@@ -825,6 +1029,7 @@ function buildDashboardHtml(context) {
       <section class="grid">
         <div class="card">
           <h2>Quick Actions</h2>
+          <div class="accent-line"></div>
           <div class="button-grid">
             <button data-command="z3dk.build">Build Z3DK</button>
             <button data-command="z3dk.runTests">Run Tests</button>
@@ -837,6 +1042,7 @@ function buildDashboardHtml(context) {
 
         <div class="card">
           <h2>Integrations</h2>
+          <div class="accent-line"></div>
           <div class="button-grid">
             <button data-command="z3dk.openWorkspace">Open Dev Workspace</button>
             <button data-command="z3dk.openReadme" class="secondary">Open Z3DK README</button>
@@ -848,6 +1054,7 @@ function buildDashboardHtml(context) {
 
         <div class="card">
           <h2>Models + AFS</h2>
+          <div class="accent-line"></div>
           <div class="button-grid">
             <button data-command="z3dk.openModelCatalog">Model Catalog</button>
             <button data-command="z3dk.openModelPortfolio" class="secondary">Model Portfolio</button>
@@ -858,22 +1065,49 @@ function buildDashboardHtml(context) {
 
         <div class="card">
           <h2>Continue</h2>
+          <div class="accent-line"></div>
           <div class="button-grid">
             <button data-command="z3dk.openContinueConfigTs" class="secondary">Open config.ts</button>
             <button data-command="z3dk.openContinueConfig">Open config.yaml</button>
           </div>
+          <div class="mini">Farore is the default chat + autocomplete model.</div>
+        </div>
+
+        <div class="card">
+          <h2>Emulator Loop</h2>
+          <div class="accent-line"></div>
+          <div class="button-grid">
+            <button data-command="z3dk.launchMesen">Mesen2-OOS</button>
+            <button data-command="z3dk.launchYaze" class="secondary">yaze</button>
+            <button data-command="z3dk.openRomFolder" class="tertiary">Open ROM Folder</button>
+            <button data-command="z3dk.exportSymbols">Export Symbols</button>
+          </div>
+          <div class="mini">Use launch args to auto-load ROM + symbols.</div>
+        </div>
+
+        <div class="card">
+          <h2>Disassembly Lab</h2>
+          <div class="accent-line"></div>
+          <div class="button-grid">
+            <button data-command="z3dk.exportDisassembly">Export Hack Disasm</button>
+            <button data-command="z3dk.findUsdasmLabel" class="secondary">Find USDASM Label</button>
+            <button data-command="z3dk.openUsdasmRoot" class="tertiary">Open USDASM Root</button>
+          </div>
+          <div class="mini">USDASM is the source of truth for vanilla labels.</div>
         </div>
       </section>
 
       <section class="grid">
         <div class="card">
           <h2>Runtime Status</h2>
+          <div class="accent-line"></div>
           <div class="status">
             ${statusRows}
           </div>
         </div>
         <div class="card">
           <h2>Docs & Profiles</h2>
+          <div class="accent-line"></div>
           <div class="status">
             ${docRows}
           </div>
@@ -922,6 +1156,7 @@ async function startClient(context) {
 
   client = new LanguageClient('z3dk', 'Z3DK Language Server', serverOptions, clientOptions);
   context.subscriptions.push(client.start());
+  updateStatusBar(context);
   return client;
 }
 
@@ -932,6 +1167,9 @@ async function stopClient() {
   const current = client;
   client = undefined;
   await current.stop();
+  if (extensionContext) {
+    updateStatusBar(extensionContext);
+  }
 }
 
 async function restartClient(context) {
@@ -960,6 +1198,7 @@ function buildExportSymbolsCommand(config) {
 }
 
 function activate(context) {
+  extensionContext = context;
   ensureOutputChannel();
   commandProvider = new Z3dkCommandProvider(context);
   context.subscriptions.push(vscode.window.registerTreeDataProvider('z3dk.commands', commandProvider));
@@ -995,6 +1234,106 @@ function activate(context) {
     await restartClient(context);
   }));
 
+  context.subscriptions.push(vscode.commands.registerCommand('z3dk.openDashboard', async () => {
+    await vscode.commands.executeCommand('workbench.view.extension.z3dk');
+    if (dashboardProvider) {
+      dashboardProvider.refresh();
+    }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('z3dk.launchMesen', () => {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    const mesenExecutable = resolveMesenExecutable(config);
+    if (!mesenExecutable) {
+      vscode.window.showWarningMessage('Set z3dk.mesenPath to launch Mesen2-OOS.');
+      return;
+    }
+    const romPath = expandHome(config.get('romPath')) || '';
+    const symbolsPath = resolveSymbolsPath(config, romPath);
+    const args = expandArgs(config.get('mesenArgs') || [], {
+      rom: romPath,
+      symbols: symbolsPath
+    });
+    const command = buildLaunchCommand(mesenExecutable, args);
+    const rootDir = z3dkRoot(context) || workspaceRoot();
+    runInTerminal(command, rootDir);
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('z3dk.launchYaze', () => {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    const yazeExecutable = expandHome(config.get('yazePath'));
+    if (!yazeExecutable) {
+      vscode.window.showWarningMessage('Set z3dk.yazePath to launch yaze.');
+      return;
+    }
+    const romPath = expandHome(config.get('romPath')) || '';
+    const symbolsPath = resolveSymbolsPath(config, romPath);
+    const args = expandArgs(config.get('yazeLaunchArgs') || [], {
+      rom: romPath,
+      symbols: symbolsPath
+    });
+    const command = buildLaunchCommand(yazeExecutable, args);
+    const rootDir = z3dkRoot(context) || workspaceRoot();
+    runInTerminal(command, rootDir);
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('z3dk.openRomFolder', async () => {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    const romPath = expandHome(config.get('romPath'));
+    if (!romPath || !fs.existsSync(romPath)) {
+      vscode.window.showWarningMessage('Set z3dk.romPath to open the ROM folder.');
+      return;
+    }
+    await revealFolder(path.dirname(romPath));
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('z3dk.openUsdasmRoot', async () => {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    const usdasmRoot = resolveUsdasmRoot(config);
+    if (!usdasmRoot) {
+      vscode.window.showWarningMessage('Set z3dk.usdasmRoot to open USDASM.');
+      return;
+    }
+    await revealFolder(usdasmRoot);
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('z3dk.findUsdasmLabel', async () => {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    const usdasmRoot = resolveUsdasmRoot(config);
+    const label = await vscode.window.showInputBox({
+      prompt: 'USDASM label to locate',
+      placeHolder: 'e.g. Link_Main or Sprite_Execute',
+      ignoreFocusOut: true
+    });
+    if (!label) {
+      return;
+    }
+    const defaultGlob = '**/*.asm,**/*.inc,**/*.s,**/*.a65';
+    const glob = config.get('usdasmGlob') || defaultGlob;
+    let filesToInclude = glob;
+    if (usdasmRoot) {
+      filesToInclude = glob
+        .split(',')
+        .map(entry => path.join(usdasmRoot, entry.trim()))
+        .join(',');
+    }
+    await vscode.commands.executeCommand('workbench.action.findInFiles', {
+      query: label,
+      filesToInclude
+    });
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('z3dk.exportDisassembly', () => {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    const command = buildDisassemblyCommand(config, context);
+    if (!command) {
+      vscode.window.showWarningMessage('Set z3dk.disasmCommand or build z3disasm to export the hack disassembly.');
+      return;
+    }
+    const rootDir = z3dkRoot(context) || workspaceRoot();
+    runInTerminal(command, rootDir);
+  }));
+
   context.subscriptions.push(vscode.commands.registerCommand('z3dk.refresh', () => {
     if (commandProvider) {
       commandProvider.refresh();
@@ -1002,12 +1341,14 @@ function activate(context) {
     if (dashboardProvider) {
       dashboardProvider.refresh();
     }
+    updateStatusBar(context);
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('z3dk.refreshDashboard', () => {
     if (dashboardProvider) {
       dashboardProvider.refresh();
     }
+    updateStatusBar(context);
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('z3dk.openWorkspace', async () => {
@@ -1122,10 +1463,12 @@ function activate(context) {
       if (dashboardProvider) {
         dashboardProvider.refresh();
       }
+      updateStatusBar(context);
     }
   }));
 
   startClient(context);
+  updateStatusBar(context);
 }
 
 async function deactivate() {

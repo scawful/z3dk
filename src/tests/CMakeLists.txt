@@ -97,7 +97,7 @@ if(ASAR_GEN_EXE_TEST)
 	set_asar_test_shared_properties(asar-app-test)
 
 	add_custom_target(run-app-test
-		asar-app-test "$<TARGET_FILE:asar-standalone>" "${CMAKE_CURRENT_SOURCE_DIR}/../../tests" "${CMAKE_CURRENT_SOURCE_DIR}/../../dummy_rom.sfc" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-app"
+		asar-app-test "$<TARGET_FILE:z3asm>" "${CMAKE_CURRENT_SOURCE_DIR}/../../tests" "${CMAKE_CURRENT_SOURCE_DIR}/../../dummy_rom.sfc" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-app"
 		VERBATIM)
 	add_dependencies(run-tests run-app-test)
 	set_property(TARGET run-app-test PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
@@ -109,30 +109,30 @@ if(ASAR_GEN_DLL_TEST)
 		
 		"${CMAKE_CURRENT_SOURCE_DIR}/test.cpp"
 		
-		"${CMAKE_CURRENT_SOURCE_DIR}/../asar-dll-bindings/c/asardll.c"
-		"${CMAKE_CURRENT_SOURCE_DIR}/../asar-dll-bindings/c/asardll.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/asardll.c"
+		"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/asardll.h"
 	)
 
-	target_include_directories(asar-dll-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../asar-dll-bindings/c/")
+	target_include_directories(asar-dll-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/")
 	target_compile_definitions(asar-dll-test PRIVATE ASAR_TEST_DLL)
 
 	set_asar_test_shared_properties(asar-dll-test)
 
 	add_custom_target(run-dll-test
-		asar-dll-test "$<TARGET_FILE:asar>" "${CMAKE_CURRENT_SOURCE_DIR}/../../tests" "${CMAKE_CURRENT_SOURCE_DIR}/../../dummy_rom.sfc" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-dll"
+		asar-dll-test "$<TARGET_FILE:libz3dk>" "${CMAKE_CURRENT_SOURCE_DIR}/../../tests" "${CMAKE_CURRENT_SOURCE_DIR}/../../dummy_rom.sfc" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-dll"
 		VERBATIM)
 	add_dependencies(run-tests run-dll-test)
 	set_property(TARGET run-dll-test PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
 
 	add_executable(newtest
 		"${CMAKE_CURRENT_SOURCE_DIR}/newtest.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/../asar-dll-bindings/c/asardll.c"
-		"${CMAKE_CURRENT_SOURCE_DIR}/../asar-dll-bindings/c/asardll.h")
-	target_include_directories(newtest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../asar-dll-bindings/c/")
+		"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/asardll.c"
+		"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/asardll.h")
+	target_include_directories(newtest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/")
 	set_asar_test_shared_properties(newtest)
 
 	add_custom_target(run-newtest
-		newtest "$<TARGET_FILE:asar>" "${CMAKE_CURRENT_SOURCE_DIR}/../../tests" "${CMAKE_CURRENT_SOURCE_DIR}/../../dummy_rom.sfc"
+		newtest "$<TARGET_FILE:libz3dk>" "${CMAKE_CURRENT_SOURCE_DIR}/../../tests" "${CMAKE_CURRENT_SOURCE_DIR}/../../dummy_rom.sfc"
 		VERBATIM)
 	add_dependencies(run-tests run-newtest)
 	set_property(TARGET run-newtest PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
@@ -150,7 +150,7 @@ if(ASAR_GEN_DLL_TEST)
 		# error) so disable the interface tests in this case.
 		find_package(Python3)
 		add_custom_target(run-interface-test
-			"${CMAKE_COMMAND}" -E env "ASARDLL=$<TARGET_FILE:asar>" "ASAREXE=$<TARGET_FILE:asar-standalone>" "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/interface-tests/main.py"
+			"${CMAKE_COMMAND}" -E env "ASARDLL=$<TARGET_FILE:libz3dk>" "ASAREXE=$<TARGET_FILE:z3asm>" "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/interface-tests/main.py"
 			VERBATIM)
 		add_dependencies(run-tests run-interface-test)
 		set_property(TARGET run-interface-test PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
@@ -161,7 +161,7 @@ if(ASAR_GEN_DLL_TEST)
 		set(ASAR_CS_SOURCES "")
 		list(APPEND ASAR_CS_SOURCES
 			"${CMAKE_CURRENT_SOURCE_DIR}/interface-tests/test.cs"
-			"${CMAKE_CURRENT_SOURCE_DIR}/../asar-dll-bindings/c_sharp/asar.cs"
+			"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c_sharp/asar.cs"
 		)
 
 		if(CMAKE_GENERATOR MATCHES "Visual Studio")
@@ -188,13 +188,15 @@ if(ASAR_GEN_DLL_TEST)
 			# so we set the cwd to the directory with asar.dll and add it to LD_LIBRARY_PATH.
 			if(WIN32)
 				set(cs_test_cmd_prefix "")
+			elseif(APPLE)
+				set(cs_test_cmd_prefix "${CMAKE_COMMAND}" -E env "DYLD_LIBRARY_PATH=." mono)
 			else()
 				set(cs_test_cmd_prefix "${CMAKE_COMMAND}" -E env "LD_LIBRARY_PATH=." mono)
 			endif()
 			add_custom_target(run-cs-interface-test
 				${cs_test_cmd_prefix} "${ASAR_CS_TEST_EXEC}"
-				WORKING_DIRECTORY "$<TARGET_FILE_DIR:asar>"
-				DEPENDS asar asar-csharp-test
+				WORKING_DIRECTORY "$<TARGET_FILE_DIR:libz3dk>"
+				DEPENDS libz3dk asar-csharp-test
 				VERBATIM)
 			add_dependencies(run-tests run-cs-interface-test)
 			set_property(TARGET run-cs-interface-test PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)

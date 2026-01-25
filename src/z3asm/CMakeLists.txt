@@ -7,7 +7,7 @@ option(ASAR_GEN_EXE "Build Asar standalone application" ON)
 option(ASAR_GEN_DLL "Build Asar shared library" ON)
 option(ASAR_GEN_LIB "Build Asar static library" ON)
 option(ASAR_COVERAGE "Build Asar with coverage tracking support" OFF)
-option(ASAR_USE_THREADS "Run Asar in a new thread to alleviate stack usage problems" ON)
+option(ASAR_USE_THREADS "Run Asar in a new thread to alleviate stack usage problems" OFF)
 if (MSVC)
 	message(STATUS "In MSVC you can override MSVC_LIB_TYPE, valid values are D for dynamic and T for static")
 endif()
@@ -248,30 +248,27 @@ endif()
 
 if(ASAR_GEN_EXE)
 	add_executable(
-		asar-standalone
-
-		"${CMAKE_CURRENT_SOURCE_DIR}/interface-cli.cpp"
-
-		${ASAR_SHARED_SOURCE_FILES}
+		z3asm
+		"${CMAKE_CURRENT_SOURCE_DIR}/z3asm_main.cc"
 		${ASAR_RESOURCE_FILES}
-		)
+	)
 
-	set_asar_shared_properties(asar-standalone "T" TRUE)
+	set_asar_shared_properties(z3asm "T" TRUE)
 
 	if(ASAR_COVERAGE)
-		target_compile_options(asar-standalone PRIVATE -fprofile-arcs -ftest-coverage)
+		target_compile_options(z3asm PRIVATE -fprofile-arcs -ftest-coverage)
 		SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lgcov --coverage -fprofile-arcs")
 	endif()
   
-	set_target_properties(asar-standalone
+	set_target_properties(z3asm
 		PROPERTIES
-		OUTPUT_NAME "asar"
+		OUTPUT_NAME "z3asm"
 		ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin"
 		LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin"
 		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin"
 	)
 
-	install(TARGETS asar-standalone)
+	install(TARGETS z3asm)
 
 endif(ASAR_GEN_EXE)
 
@@ -283,7 +280,7 @@ endif(ASAR_GEN_EXE)
 
 if(ASAR_GEN_DLL)
 	add_library(
-		asar SHARED
+		libz3dk SHARED
 
 		"${CMAKE_CURRENT_SOURCE_DIR}/interface-lib.cpp"
 
@@ -291,21 +288,22 @@ if(ASAR_GEN_DLL)
 		${ASAR_LIB_RESOURCE_FILES}
 	)
 
-	target_compile_definitions(asar PRIVATE "ASAR_SHARED")
-	set_asar_shared_properties(asar "T" TRUE)
+	target_compile_definitions(libz3dk PRIVATE "ASAR_SHARED")
+	set_asar_shared_properties(libz3dk "T" TRUE)
 
-	set_target_properties(asar
+	set_target_properties(libz3dk
 		PROPERTIES
+		OUTPUT_NAME "z3dk"
 		ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lib"
 		LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lib"
 		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lib"
 	)
 
-	install(TARGETS asar)
+	install(TARGETS libz3dk)
 
 	if(ASAR_COVERAGE)
-		target_compile_options(asar PRIVATE --coverage)
-		target_link_options(asar PRIVATE --coverage)
+		target_compile_options(libz3dk PRIVATE --coverage)
+		target_link_options(libz3dk PRIVATE --coverage)
 	endif()
 
 endif(ASAR_GEN_DLL)
@@ -318,22 +316,56 @@ endif(ASAR_GEN_DLL)
 
 if (ASAR_GEN_LIB)
 	add_library(
-		asar-static STATIC
+		libz3dk-static STATIC
 		"${CMAKE_CURRENT_SOURCE_DIR}/interface-lib.cpp"
 
 		${ASAR_SHARED_SOURCE_FILES}
 		${ASAR_LIB_RESOURCE_FILES}
 	)
-	target_compile_definitions(asar-static PRIVATE "ASAR_STATIC")
-	set_asar_shared_properties(asar-static "D" FALSE)
+	target_compile_definitions(libz3dk-static PRIVATE "ASAR_STATIC")
+	set_asar_shared_properties(libz3dk-static "D" FALSE)
 
-	set_target_properties(asar-static
+	set_target_properties(libz3dk-static
 		PROPERTIES
+		OUTPUT_NAME "z3dk"
 		ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lib"
 		LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lib"
 		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lib"
 	)
 
-	install(TARGETS asar-static)
+	install(TARGETS libz3dk-static)
 
 endif()
+
+# Protobuf handling
+# find_package(OpenSSL CONFIG REQUIRED)
+find_package(gRPC CONFIG REQUIRED)
+# find_package(Protobuf)
+include_directories(${Protobuf_INCLUDE_DIRS})
+
+add_executable(zasar_server "${CMAKE_CURRENT_SOURCE_DIR}/zAsar_server.cc")
+target_link_libraries(zasar_server PRIVATE protobuf::libprotobuf gRPC::grpc++ libz3dk-static)
+
+add_library(zasar_proto OBJECT "${CMAKE_CURRENT_SOURCE_DIR}/proto/zAsar.proto")
+target_link_libraries(zasar_server PRIVATE zasar_proto)
+
+set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(PROTO_IMPORT_DIRS "${CMAKE_CURRENT_LIST_DIR}/proto")
+
+target_include_directories(zasar_proto PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+
+# Proto file handling
+protobuf_generate(
+  TARGET zasar_proto
+  OUT_VAR PROTO_GENERATED_FILES
+  IMPORT_DIRS ${PROTO_IMPORT_DIRS}
+  PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+
+# gRPC service generation
+protobuf_generate(
+    TARGET zasar_proto
+    LANGUAGE grpc
+    GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+    PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+    IMPORT_DIRS ${PROTO_IMPORT_DIRS}
+    PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")

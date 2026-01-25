@@ -119,6 +119,7 @@ int (*asar_apiversion)(void);
 bool (*asar_reset)(void);
 bool (*asar_patch)(const struct patchparams *params);
 int (*asar_maxromsize)(void);
+int (*asar_patchparams_size)(void);
 const struct errordata * (*asar_geterrors)(int * count);
 const struct errordata * (*asar_getwarnings)(int * count);
 const char * const * (*asar_getprints)(int * count);
@@ -143,6 +144,7 @@ static bool asar_init_shared(void)
 	loadraw("asar_reset", asar_reset);
 	loadraw("asar_patch", asar_patch);
 	loadraw("asar_maxromsize", asar_maxromsize);
+	loadraw("asar_patchparams_size", asar_patchparams_size);
 	loadraw("asar_geterrors", asar_geterrors);
 	loadraw("asar_getwarnings", asar_getwarnings);
 	loadraw("asar_getprints", asar_getprints);

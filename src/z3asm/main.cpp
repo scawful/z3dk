@@ -1301,9 +1301,9 @@ void reseteverything()
 
 	in_macro_def = 0;
 
-	#ifndef ASAR_SHARED
+#if !defined(ASAR_SHARED) && !defined(ASAR_STATIC)
 		free(const_cast<unsigned char*>(romdata_r));
-	#endif
+#endif
 
 	callstack.reset();
 	simple_callstacks = true;

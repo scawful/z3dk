@@ -538,6 +538,14 @@ EXPORT int asar_maxromsize()
 }
 
 /* $EXPORT$
+ * Returns the size of the patchparams struct expected by asar_patch().
+ */
+EXPORT int asar_patchparams_size()
+{
+	return static_cast<int>(sizeof(patchparams));
+}
+
+/* $EXPORT$
  * Get a list of all errors.
  * All pointers from these functions are valid only until the same function is
  * called again, or until asar_patch, asar_reset or asar_close is called,

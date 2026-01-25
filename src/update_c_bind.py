@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-# generates asar-dll-bindings/c/asardll.h, asardll.c, and asar/interface-lib.h,
-# based on asar/interface-lib.cpp
+# generates bindings/c/asardll.h, asardll.c, and z3asm/interface-lib.h,
+# based on z3asm/interface-lib.cpp
 
 import os
 import re
 
 src_dir = os.path.dirname(__file__)
-inp_file = open(os.path.join(src_dir, "asar", "interface-lib.cpp")).read().strip()
+inp_file = open(os.path.join(src_dir, "z3asm", "interface-lib.cpp")).read().strip()
 
 functions = []
 structs = []
@@ -106,6 +106,6 @@ def fmt(dir, fname, replacements):
     out.write(output)
     print("wrote to",fname)
 
-fmt(["asar-dll-bindings","c"], "asardll.h", {"$STRUCTS$": structs, "$FUNCTIONS$": asardll_h_funcs, "$APIVERSION$": api_version})
-fmt(["asar"], "interface-lib.h", {"$STRUCTS$": structs, "$FUNCTIONS$": interface_lib_funcs, "$APIVERSION$": api_version})
-fmt(["asar-dll-bindings","c"], "asardll.c", {"$FUNCTIONPROTOS$": asardll_c_protos, "$FUNCTIONLOADS$": asardll_c_loads})
+fmt(["bindings","c"], "asardll.h", {"$STRUCTS$": structs, "$FUNCTIONS$": asardll_h_funcs, "$APIVERSION$": api_version})
+fmt(["z3asm"], "interface-lib.h", {"$STRUCTS$": structs, "$FUNCTIONS$": interface_lib_funcs, "$APIVERSION$": api_version})
+fmt(["bindings","c"], "asardll.c", {"$FUNCTIONPROTOS$": asardll_c_protos, "$FUNCTIONLOADS$": asardll_c_loads})

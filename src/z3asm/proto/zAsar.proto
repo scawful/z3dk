@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package zasar;
+
+// Message for patch parameters
+message PatchRequest {
+    string asm_file = 1;
+    string rom_file = 2;
+}
+
+// Message for patch results
+message PatchResponse {
+    bool success = 1;
+    repeated Error errors = 2;
+}
+
+// Message for errors and diagnostics
+message Error {
+    string message = 1;
+    int32 line = 2;
+    int32 column = 3;
+    string file = 4;
+}
+
+// zAsar service definition
+service zAsarService {
+    // Patch a ROM with an assembly file
+    rpc Patch(PatchRequest) returns (PatchResponse);
+
+    // Get diagnostics for an assembly file
+    rpc GetDiagnostics(PatchRequest) returns (PatchResponse);
+}

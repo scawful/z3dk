@@ -9,7 +9,9 @@ Z3DK provides Asar syntax highlighting, z3lsp language features, and Zelda 3 too
 - Z3DK Activity Bar view with quick actions
 - Dashboard view with integration status (yaze, Mesen2, ROM paths, USDASM, models, Continue)
 - Emulator launchers + disassembly lab controls
-- Status bar cluster for z3lsp/ROM/symbols/emulators
+- Compact status bar indicators (Z3DK, LSP, ROM/Symbols)
+- Editor context menu actions + CodeLens when z3lsp is active
+- Inline label/org annotations in Asar files (toggleable)
 - Z3DK submenu in the View menu
 
 ## Quick Start (repo-local)
@@ -54,6 +56,8 @@ Z3DK provides Asar syntax highlighting, z3lsp language features, and Zelda 3 too
 - `z3dk.usdasmGlob`: glob for USDASM label search.
 - `z3dk.disasmCommand`: command to export USDASM-style disassembly (supports `${rom}`, `${symbols}`, `${output}`, `${usdasm}`).
 - `z3dk.disasmOutputPath`: output path for disassembly exports.
+- `z3dk.enableCodeLens`: show Z3DK CodeLens actions in Asar files.
+- `z3dk.editorAnnotations`: show inline label/org tags in Asar files.
 
 ## Commands
 - `Z3DK: Run Tests`

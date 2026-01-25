@@ -12,6 +12,8 @@ let commandProvider;
 let dashboardProvider;
 let statusItems = [];
 let extensionContext;
+let lspActive = false;
+let codeLensProvider;
 let languageClientLoadError;
 
 function workspaceRoot() {
@@ -403,18 +405,12 @@ function ensureStatusBar(context) {
   const main = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   const lsp = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
   const rom = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
-  const symbols = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
-  const mesen = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
-  const yaze = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
 
   main.command = 'z3dk.openDashboard';
   lsp.command = 'z3dk.restartServer';
   rom.command = 'z3dk.openRomFolder';
-  symbols.command = 'z3dk.exportSymbols';
-  mesen.command = 'z3dk.launchMesen';
-  yaze.command = 'z3dk.launchYaze';
 
-  statusItems = [main, lsp, rom, symbols, mesen, yaze];
+  statusItems = [main, lsp, rom];
   statusItems.forEach(item => context.subscriptions.push(item));
 }
 
@@ -423,56 +419,113 @@ function updateStatusBar(context) {
   const config = vscode.workspace.getConfiguration('z3dk');
   const romPath = expandHome(config.get('romPath')) || '';
   const symbolsPath = resolveSymbolsPath(config, romPath);
-  const mesenPath = resolveMesenExecutable(config);
-  const yazePath = expandHome(config.get('yazePath')) || '';
   const lspLabel = client ? 'on' : 'off';
 
-  const [main, lsp, rom, symbols, mesen, yaze] = statusItems;
+  const [main, lsp, rom] = statusItems;
   main.text = '$(triangle-up) Z3DK';
   main.tooltip = 'Open Z3DK dashboard';
   main.show();
 
-  lsp.text = `$(pulse) z3lsp: ${lspLabel}`;
+  lsp.text = `$(pulse) LSP ${lspLabel}`;
   lsp.tooltip = 'Restart z3lsp';
   lsp.show();
 
   if (romPath) {
-    rom.text = `$(circuit-board) ROM: ${path.basename(romPath)}`;
-    rom.tooltip = romPath;
+    const romName = path.basename(romPath);
+    const symReady = symbolsPath && fs.existsSync(symbolsPath) ? 'ok' : 'miss';
+    rom.text = `$(circuit-board) ${romName} • sym ${symReady}`;
+    rom.tooltip = `ROM: ${romPath}\nSymbols: ${symbolsPath || 'unset'}`;
   } else {
-    rom.text = '$(circuit-board) ROM: unset';
+    rom.text = '$(circuit-board) ROM unset';
     rom.tooltip = 'Set z3dk.romPath';
   }
   rom.show();
+}
 
-  if (symbolsPath && fs.existsSync(symbolsPath)) {
-    symbols.text = `$(database) Symbols: ready`;
-    symbols.tooltip = symbolsPath;
-  } else {
-    symbols.text = `$(database) Symbols: missing`;
-    symbols.tooltip = symbolsPath || 'Set z3dk.symbolsPath';
+function setLspActive(active) {
+  lspActive = active;
+  vscode.commands.executeCommand('setContext', 'z3dk.lspActive', active);
+  if (codeLensProvider) {
+    codeLensProvider.refresh();
   }
-  symbols.show();
+}
 
-  const mesenStatus = pathStatus(mesenPath);
-  if (mesenPath) {
-    mesen.text = `$(debug-alt-small) Mesen2: ${mesenStatus.exists ? 'ready' : 'missing'}`;
-    mesen.tooltip = mesenStatus.value;
-  } else {
-    mesen.text = '$(debug-alt-small) Mesen2: unset';
-    mesen.tooltip = 'Set z3dk.mesenPath';
-  }
-  mesen.show();
+function isAsarDocument(document) {
+  return document && document.languageId === 'asar' && document.uri.scheme === 'file';
+}
 
-  const yazeStatus = pathStatus(yazePath);
-  if (yazePath) {
-    yaze.text = `$(rocket) yaze: ${yazeStatus.exists ? 'ready' : 'missing'}`;
-    yaze.tooltip = yazeStatus.value;
-  } else {
-    yaze.text = '$(rocket) yaze: unset';
-    yaze.tooltip = 'Set z3dk.yazePath';
+function initDecorations() {
+  if (!labelDecorationType) {
+    labelDecorationType = vscode.window.createTextEditorDecorationType({
+      after: {
+        color: new vscode.ThemeColor('descriptionForeground'),
+        margin: '0 0 0 8px'
+      }
+    });
   }
-  yaze.show();
+  if (!orgDecorationType) {
+    orgDecorationType = vscode.window.createTextEditorDecorationType({
+      after: {
+        color: new vscode.ThemeColor('textLink.foreground'),
+        margin: '0 0 0 8px'
+      }
+    });
+  }
+}
+
+function clearAnnotations(editor) {
+  if (!editor) {
+    return;
+  }
+  if (labelDecorationType) {
+    editor.setDecorations(labelDecorationType, []);
+  }
+  if (orgDecorationType) {
+    editor.setDecorations(orgDecorationType, []);
+  }
+}
+
+function updateAnnotations(editor) {
+  if (!editor || !isAsarDocument(editor.document)) {
+    return;
+  }
+  const config = vscode.workspace.getConfiguration('z3dk');
+  if (!lspActive || !config.get('editorAnnotations')) {
+    clearAnnotations(editor);
+    return;
+  }
+  initDecorations();
+
+  const labelRanges = [];
+  const orgRanges = [];
+  const doc = editor.document;
+  const labelRegex = /^\s*[A-Za-z_][A-Za-z0-9_]*:/;
+  const orgRegex = /^\s*org\b/i;
+  for (let i = 0; i < doc.lineCount; i += 1) {
+    const line = doc.lineAt(i);
+    const text = line.text;
+    if (labelRegex.test(text)) {
+      labelRanges.push({
+        range: new vscode.Range(i, text.length, i, text.length),
+        renderOptions: { after: { contentText: 'label' } }
+      });
+    }
+    if (orgRegex.test(text)) {
+      orgRanges.push({
+        range: new vscode.Range(i, text.length, i, text.length),
+        renderOptions: { after: { contentText: 'org' } }
+      });
+    }
+  }
+  editor.setDecorations(labelDecorationType, labelRanges);
+  editor.setDecorations(orgDecorationType, orgRanges);
+}
+
+function scheduleAnnotationUpdate(editor) {
+  if (annotationTimer) {
+    clearTimeout(annotationTimer);
+  }
+  annotationTimer = setTimeout(() => updateAnnotations(editor), 150);
 }
 
 class CommandItem extends vscode.TreeItem {
@@ -628,6 +681,39 @@ class Z3dkCommandProvider {
   }
 }
 
+class Z3dkCodeLensProvider {
+  constructor() {
+    this._onDidChangeCodeLenses = new vscode.EventEmitter();
+    this.onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
+  }
+
+  refresh() {
+    this._onDidChangeCodeLenses.fire();
+  }
+
+  provideCodeLenses(document) {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    if (!lspActive || !config.get('enableCodeLens') || !isAsarDocument(document)) {
+      return [];
+    }
+    const top = new vscode.Range(0, 0, 0, 0);
+    return [
+      new vscode.CodeLens(top, {
+        title: 'Z3DK Dashboard',
+        command: 'z3dk.openDashboard'
+      }),
+      new vscode.CodeLens(top, {
+        title: 'Symbols',
+        command: 'z3dk.exportSymbols'
+      }),
+      new vscode.CodeLens(top, {
+        title: 'USDASM Search',
+        command: 'z3dk.findUsdasmLabel'
+      })
+    ];
+  }
+}
+
 class Z3dkDashboardProvider {
   constructor(context) {
     this.context = context;
@@ -687,27 +773,28 @@ class Z3dkDashboardProvider {
 }
 
 function buildDashboardHtml(context) {
-  const config = vscode.workspace.getConfiguration('z3dk');
-  const rootDir = z3dkRoot(context) || workspaceRoot();
-  const serverPath = resolveServerPath(config, rootDir);
-  const romPath = expandHome(config.get('romPath')) || '';
-  const symbolsPath = resolveSymbolsPath(config, romPath);
-  const yazePath = expandHome(config.get('yazePath')) || 'yaze';
-  const devWorkspacePath = expandHome(config.get('devWorkspacePath')) || '';
-  const modelCatalogPath = resolveModelCatalogPath(config);
-  const modelPortfolioPath = resolveModelPortfolioPath(config);
-  const continueConfigPath = resolveContinueConfigPath(config);
-  const continueConfigTsPath = resolveContinueConfigTsPath(config);
-  const oracleRoot = resolveRepoPath('oracle-of-secrets', 'oracleRoot', config);
-  const yazeRoot = resolveRepoPath('yaze', 'yazeRoot', config);
-  const mesenRoot = resolveRepoPath('mesen2-oos', 'mesenRoot', config);
-  const mesenPath = resolveMesenExecutable(config);
-  const usdasmRoot = resolveUsdasmRoot(config);
-  const disasmOutputPath = expandHome(config.get('disasmOutputPath')) || '';
-  const z3dkRootPath = z3dkRoot(context);
-  const afsScratchpad = z3dkRootPath
-    ? path.join(z3dkRootPath, '.context', 'scratchpad', 'state.md')
-    : '';
+  try {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    const rootDir = z3dkRoot(context) || workspaceRoot();
+    const serverPath = resolveServerPath(config, rootDir);
+    const romPath = expandHome(config.get('romPath')) || '';
+    const symbolsPath = resolveSymbolsPath(config, romPath);
+    const yazePath = expandHome(config.get('yazePath')) || 'yaze';
+    const devWorkspacePath = expandHome(config.get('devWorkspacePath')) || '';
+    const modelCatalogPath = resolveModelCatalogPath(config);
+    const modelPortfolioPath = resolveModelPortfolioPath(config);
+    const continueConfigPath = resolveContinueConfigPath(config);
+    const continueConfigTsPath = resolveContinueConfigTsPath(config);
+    const oracleRoot = resolveRepoPath('oracle-of-secrets', 'oracleRoot', config);
+    const yazeRoot = resolveRepoPath('yaze', 'yazeRoot', config);
+    const mesenRoot = resolveRepoPath('mesen2-oos', 'mesenRoot', config);
+    const mesenPath = resolveMesenExecutable(config);
+    const usdasmRoot = resolveUsdasmRoot(config);
+    const disasmOutputPath = expandHome(config.get('disasmOutputPath')) || '';
+    const z3dkRootPath = z3dkRoot(context);
+    const afsScratchpad = z3dkRootPath
+      ? path.join(z3dkRootPath, '.context', 'scratchpad', 'state.md')
+      : '';
 
   const statuses = [
     { label: 'z3lsp', ...pathStatus(serverPath) },
@@ -762,7 +849,7 @@ function buildDashboardHtml(context) {
     usdasmRoot ? 'usdasm linked' : 'usdasm unset'
   ];
 
-  return `
+    return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -770,212 +857,103 @@ function buildDashboardHtml(context) {
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <style>
         :root {
-          --ink: #1a1a1a;
-          --subtle: rgba(0, 0, 0, 0.65);
-          --card: rgba(255, 255, 255, 0.65);
-          --card-strong: rgba(255, 255, 255, 0.8);
-          --accent: #2a7f6f;
-          --accent-2: #d07a2d;
-          --accent-3: #3e6fb0;
-          --warn: #c86f3f;
-          --ok: #2c7d6f;
-          --border: rgba(26, 26, 26, 0.12);
+          --bg: var(--vscode-editor-background, #1e1e1e);
+          --panel: var(--vscode-editorWidget-background, var(--vscode-sideBar-background, #252526));
+          --ink: var(--vscode-editor-foreground, #d4d4d4);
+          --subtle: var(--vscode-descriptionForeground, rgba(200, 200, 200, 0.7));
+          --border: var(--vscode-editorWidget-border, rgba(255, 255, 255, 0.08));
+          --accent: var(--vscode-focusBorder, #3b82f6);
+          --ok: #3fb99a;
+          --warn: #d08a4a;
         }
 
         body {
           margin: 0;
-          padding: 20px 16px 40px;
-          color: var(--vscode-foreground, var(--ink));
-          font-family: "Space Grotesk", "Avenir Next", "Helvetica Neue", sans-serif;
-          background: radial-gradient(circle at 10% 10%, #f7efe2 0%, transparent 45%),
-            radial-gradient(circle at 85% 15%, #d7efe7 0%, transparent 42%),
-            linear-gradient(160deg, #f7f2ea 0%, #e8eef2 70%);
-          min-height: 100vh;
-        }
-
-        body::before {
-          content: "";
-          position: fixed;
-          inset: 0;
-          background-image: linear-gradient(rgba(26, 26, 26, 0.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(26, 26, 26, 0.04) 1px, transparent 1px);
-          background-size: 28px 28px;
-          opacity: 0.5;
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        body::after {
-          content: "";
-          position: fixed;
-          inset: -20% -10%;
-          background: radial-gradient(circle at 20% 30%, rgba(42, 127, 111, 0.2), transparent 40%),
-            radial-gradient(circle at 80% 60%, rgba(208, 122, 45, 0.18), transparent 45%),
-            radial-gradient(circle at 50% 80%, rgba(62, 111, 176, 0.14), transparent 50%);
-          opacity: 0.8;
-          filter: blur(10px);
-          animation: drift 18s ease-in-out infinite;
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        @keyframes drift {
-          0%, 100% {
-            transform: translate3d(0, 0, 0);
-          }
-          50% {
-            transform: translate3d(10px, -16px, 0);
-          }
-        }
-
-        .hero {
-          position: relative;
-          padding: 18px 16px 20px;
-          border-radius: 18px;
-          background: var(--card-strong);
-          border: 1px solid var(--border);
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
-          overflow: hidden;
-          z-index: 1;
-        }
-
-        .hero::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(120deg, rgba(42, 127, 111, 0.08), transparent 60%);
-          pointer-events: none;
-        }
-
-        .hero::after {
-          content: "";
-          position: absolute;
-          top: -20px;
-          right: -40px;
-          width: 140px;
-          height: 140px;
-          background: conic-gradient(from 180deg, rgba(42, 127, 111, 0.35), rgba(208, 122, 45, 0.3), rgba(62, 111, 176, 0.25));
-          border-radius: 50%;
-          filter: blur(0.5px);
-          opacity: 0.7;
-        }
-
-        .hero h1 {
-          margin: 0 0 6px;
-          font-size: 20px;
-          letter-spacing: 0.3px;
-        }
-
-        .hero p {
-          margin: 0 0 12px;
-          font-size: 12.5px;
-          color: var(--subtle);
-          line-height: 1.4;
-        }
-
-        .badges {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-
-        .badge {
-          padding: 4px 10px;
-          border-radius: 999px;
+          padding: 8px;
+          color: var(--ink);
+          font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
           font-size: 11px;
-          background: rgba(42, 127, 111, 0.12);
-          color: #1f5d52;
-          border: 1px solid rgba(42, 127, 111, 0.2);
-          text-transform: uppercase;
-          letter-spacing: 0.8px;
+          background: var(--bg);
+          min-height: 100%;
+        }
+
+        .header {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          margin-bottom: 6px;
+        }
+
+        .title {
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
+        }
+
+        .meta {
+          color: var(--subtle);
+          font-size: 10px;
         }
 
         .grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 14px;
-          margin-top: 16px;
-          position: relative;
-          z-index: 1;
+          grid-template-columns: 1fr;
+          gap: 6px;
         }
 
         .card {
-          padding: 14px 14px 16px;
-          border-radius: 16px;
-          background: var(--card);
+          padding: 8px;
+          border-radius: 6px;
+          background: var(--panel);
           border: 1px solid var(--border);
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .card::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: 16px;
-          border: 1px dashed rgba(26, 26, 26, 0.08);
-          pointer-events: none;
         }
 
         .card .accent-line {
-          height: 3px;
-          width: 46px;
-          border-radius: 999px;
-          background: linear-gradient(90deg, rgba(42, 127, 111, 0.8), rgba(208, 122, 45, 0.6));
-          margin-bottom: 10px;
+          display: none;
         }
 
         .card h2 {
-          margin: 0 0 10px;
-          font-size: 14px;
+          margin: 0 0 6px;
+          font-size: 10px;
           text-transform: uppercase;
-          letter-spacing: 1px;
-          color: rgba(26, 26, 26, 0.7);
+          letter-spacing: 0.5px;
+          color: var(--subtle);
         }
 
         .button-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: 8px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
         }
 
         button {
           appearance: none;
-          border: none;
-          border-radius: 12px;
-          padding: 10px 12px;
-          background: rgba(42, 127, 111, 0.12);
-          color: #1e544c;
-          font-size: 12px;
+          border: 1px solid transparent;
+          border-radius: 5px;
+          padding: 4px 6px;
+          background: var(--vscode-button-background, #2563eb);
+          color: var(--vscode-button-foreground, #ffffff);
+          font-size: 10px;
           font-weight: 600;
-          letter-spacing: 0.3px;
+          letter-spacing: 0.1px;
           cursor: pointer;
-          transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
+          transition: background 0.15s ease, border-color 0.15s ease;
+          min-width: 0;
         }
 
         button:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-          background: rgba(42, 127, 111, 0.18);
+          background: var(--vscode-button-hoverBackground, #1d4ed8);
         }
 
         button.secondary {
-          background: rgba(208, 122, 45, 0.15);
-          color: #7a4017;
-        }
-
-        button.secondary:hover {
-          background: rgba(208, 122, 45, 0.2);
+          background: var(--vscode-button-secondaryBackground, #e5e7eb);
+          color: var(--vscode-button-secondaryForeground, #1f2937);
         }
 
         button.tertiary {
-          background: rgba(62, 111, 176, 0.15);
-          color: #2a4d82;
-        }
-
-        button.tertiary:hover {
-          background: rgba(62, 111, 176, 0.22);
+          background: transparent;
+          color: var(--ink);
+          border-color: var(--border);
         }
 
         .status {
@@ -986,67 +964,64 @@ function buildDashboardHtml(context) {
 
         .status-row {
           display: grid;
-          grid-template-columns: 90px 1fr auto;
-          gap: 8px;
+          grid-template-columns: 70px 1fr auto;
+          gap: 4px;
           align-items: center;
         }
 
         .status-label {
-          font-size: 11px;
+          font-size: 9px;
           text-transform: uppercase;
-          letter-spacing: 0.8px;
-          color: rgba(26, 26, 26, 0.6);
+          letter-spacing: 0.4px;
+          color: var(--subtle);
         }
 
         .status-value {
-          font-family: "Azeret Mono", "JetBrains Mono", monospace;
-          font-size: 11px;
-          color: rgba(26, 26, 26, 0.8);
+          font-family: var(--vscode-editor-font-family, "Azeret Mono", "JetBrains Mono", monospace);
+          font-size: 9px;
+          color: var(--ink);
           overflow-wrap: anywhere;
         }
 
         .status-pill {
-          padding: 4px 8px;
+          padding: 1px 5px;
           border-radius: 999px;
-          font-size: 10px;
+          font-size: 8px;
           text-transform: uppercase;
-          letter-spacing: 0.6px;
+          letter-spacing: 0.3px;
           border: 1px solid transparent;
         }
 
         .status-pill.ok {
-          background: rgba(42, 127, 111, 0.2);
-          color: #1f5d52;
-          border-color: rgba(42, 127, 111, 0.3);
+          background: rgba(63, 185, 154, 0.18);
+          color: var(--ok);
+          border-color: rgba(63, 185, 154, 0.3);
         }
 
         .status-pill.warn {
-          background: rgba(200, 111, 63, 0.2);
-          color: #6b3b1b;
-          border-color: rgba(200, 111, 63, 0.3);
+          background: rgba(208, 138, 74, 0.18);
+          color: var(--warn);
+          border-color: rgba(208, 138, 74, 0.3);
         }
 
         .note {
-          margin-top: 12px;
-          font-size: 11px;
-          color: rgba(26, 26, 26, 0.55);
+          margin-top: 4px;
+          font-size: 9px;
+          color: var(--subtle);
         }
 
         .mini {
-          font-size: 10.5px;
-          color: rgba(26, 26, 26, 0.6);
-          margin-top: 8px;
+          font-size: 9px;
+          color: var(--subtle);
+          margin-top: 4px;
         }
       </style>
     </head>
     <body>
-      <section class="hero">
-        <h1>Z3DK Command Deck</h1>
-        <p>Asar-first workflows, LSP boosts, emulator tooling, and model intelligence in one cockpit.</p>
-        <div class="badges">
-          ${infoBadges.map(badge => `<span class="badge">${escapeHtml(badge)}</span>`).join('')}
-        </div>
-      </section>
+      <div class="header">
+        <div class="title">Z3DK</div>
+        <div class="meta">${escapeHtml(infoBadges.join(' • '))}</div>
+      </div>
 
       <section class="grid">
         <div class="card">
@@ -1147,6 +1122,38 @@ function buildDashboardHtml(context) {
     </body>
     </html>
   `;
+  } catch (error) {
+    const output = ensureOutputChannel();
+    output.appendLine(`[Z3DK] Dashboard render error: ${error && error.stack ? error.stack : error}`);
+    const message = escapeHtml(error && error.message ? error.message : String(error));
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+          body {
+            font-family: "Azeret Mono", "JetBrains Mono", monospace;
+            padding: 16px;
+          }
+          .error {
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(200, 111, 63, 0.15);
+            border: 1px solid rgba(200, 111, 63, 0.4);
+          }
+        </style>
+      </head>
+      <body>
+        <div class="error">
+          <strong>Z3DK Dashboard failed to render.</strong>
+          <pre>${message}</pre>
+        </div>
+      </body>
+      </html>
+    `;
+  }
 }
 
 async function startClient(context) {
@@ -1184,7 +1191,9 @@ async function startClient(context) {
 
   client = new Client('z3dk', 'Z3DK Language Server', serverOptions, clientOptions);
   context.subscriptions.push(client.start());
+  setLspActive(true);
   updateStatusBar(context);
+  scheduleAnnotationUpdate(vscode.window.activeTextEditor);
   return client;
 }
 
@@ -1195,6 +1204,8 @@ async function stopClient() {
   const current = client;
   client = undefined;
   await current.stop();
+  setLspActive(false);
+  clearAnnotations(vscode.window.activeTextEditor);
   if (extensionContext) {
     updateStatusBar(extensionContext);
   }
@@ -1227,6 +1238,7 @@ function buildExportSymbolsCommand(config) {
 
 function activate(context) {
   extensionContext = context;
+  setLspActive(false);
   ensureOutputChannel();
   ensureOutputChannel().appendLine('Z3DK extension activated.');
   commandProvider = new Z3dkCommandProvider(context);
@@ -1235,6 +1247,21 @@ function activate(context) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('z3dk.dashboard', dashboardProvider)
   );
+  codeLensProvider = new Z3dkCodeLensProvider();
+  context.subscriptions.push(
+    vscode.languages.registerCodeLensProvider({ language: 'asar', scheme: 'file' }, codeLensProvider)
+  );
+
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
+    scheduleAnnotationUpdate(editor);
+  }));
+
+  context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => {
+    const active = vscode.window.activeTextEditor;
+    if (active && event.document === active.document) {
+      scheduleAnnotationUpdate(active);
+    }
+  }));
 
   context.subscriptions.push(vscode.commands.registerCommand('z3dk.runTests', () => {
     const config = vscode.workspace.getConfiguration('z3dk');
@@ -1268,6 +1295,13 @@ function activate(context) {
     if (dashboardProvider) {
       dashboardProvider.refresh();
     }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('z3dk.toggleAnnotations', async () => {
+    const config = vscode.workspace.getConfiguration('z3dk');
+    const current = config.get('editorAnnotations');
+    await config.update('editorAnnotations', !current, vscode.ConfigurationTarget.Workspace);
+    scheduleAnnotationUpdate(vscode.window.activeTextEditor);
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('z3dk.launchMesen', () => {
@@ -1492,6 +1526,10 @@ function activate(context) {
       if (dashboardProvider) {
         dashboardProvider.refresh();
       }
+      if (codeLensProvider) {
+        codeLensProvider.refresh();
+      }
+      scheduleAnnotationUpdate(vscode.window.activeTextEditor);
       updateStatusBar(context);
     }
   }));

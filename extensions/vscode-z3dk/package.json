@@ -30,6 +30,7 @@
     "onCommand:z3dk.openYazeRepo",
     "onCommand:z3dk.openMesenRepo",
     "onCommand:z3dk.openDashboard",
+    "onCommand:z3dk.toggleAnnotations",
     "onCommand:z3dk.launchMesen",
     "onCommand:z3dk.launchYaze",
     "onCommand:z3dk.openRomFolder",
@@ -116,6 +117,10 @@
         "title": "Z3DK: Dashboard"
       },
       {
+        "command": "z3dk.toggleAnnotations",
+        "title": "Z3DK: Toggle Annotations"
+      },
+      {
         "command": "z3dk.openOracleRepo",
         "title": "Z3DK: Oracle Repo"
       },
@@ -173,7 +178,8 @@
       "z3dk": [
         {
           "id": "z3dk.dashboard",
-          "name": "Dashboard"
+          "name": "Dashboard",
+          "type": "webview"
         },
         {
           "id": "z3dk.commands",
@@ -280,6 +286,38 @@
           "group": "7_repos"
         }
       ],
+      "editor/context": [
+        {
+          "command": "z3dk.openDashboard",
+          "when": "editorLangId == asar",
+          "group": "z3dk@1"
+        },
+        {
+          "command": "z3dk.exportSymbols",
+          "when": "editorLangId == asar && z3dk.lspActive",
+          "group": "z3dk@2"
+        },
+        {
+          "command": "z3dk.findUsdasmLabel",
+          "when": "editorLangId == asar && z3dk.lspActive",
+          "group": "z3dk@2"
+        },
+        {
+          "command": "z3dk.exportDisassembly",
+          "when": "editorLangId == asar && z3dk.lspActive",
+          "group": "z3dk@2"
+        },
+        {
+          "command": "z3dk.restartServer",
+          "when": "editorLangId == asar",
+          "group": "z3dk@3"
+        },
+        {
+          "command": "z3dk.toggleAnnotations",
+          "when": "editorLangId == asar",
+          "group": "z3dk@3"
+        }
+      ],
       "view/title": [
         {
           "command": "z3dk.refresh",
@@ -372,6 +410,16 @@
           "type": "string",
           "default": "",
           "description": "Output path for exported disassembly artifacts."
+        },
+        "z3dk.enableCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Z3DK CodeLens actions in Asar files when LSP is active."
+        },
+        "z3dk.editorAnnotations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline label/org tags in Asar files when LSP is active."
         },
         "z3dk.autoStart": {
           "type": "boolean",

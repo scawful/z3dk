@@ -2,7 +2,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vscode = require('vscode');
-const { LanguageClient } = require('vscode-languageclient/node');
+
+let LanguageClient;
 
 let client;
 let outputChannel;
@@ -11,6 +12,7 @@ let commandProvider;
 let dashboardProvider;
 let statusItems = [];
 let extensionContext;
+let languageClientLoadError;
 
 function workspaceRoot() {
   const folders = vscode.workspace.workspaceFolders;
@@ -175,6 +177,26 @@ function ensureOutputChannel() {
     outputChannel = vscode.window.createOutputChannel('Z3DK');
   }
   return outputChannel;
+}
+
+function loadLanguageClient() {
+  if (LanguageClient) {
+    return LanguageClient;
+  }
+  if (languageClientLoadError) {
+    return null;
+  }
+  try {
+    ({ LanguageClient } = require('vscode-languageclient/node'));
+    return LanguageClient;
+  } catch (err) {
+    languageClientLoadError = err;
+    const message = 'Z3DK: vscode-languageclient not found. Run npm install in extensions/vscode-z3dk.';
+    ensureOutputChannel().appendLine(message);
+    ensureOutputChannel().appendLine(String(err));
+    vscode.window.showWarningMessage(message);
+    return null;
+  }
 }
 
 function ensureTerminal() {
@@ -489,79 +511,79 @@ class Z3dkCommandProvider {
   buildItems() {
     return [
       new CommandItem(
-        'Open Dev Workspace',
+        'Workspace',
         { command: 'z3dk.openWorkspace', title: 'Open Dev Workspace' },
         'Open the multi-root workspace for Oracle + Yaze + Z3DK',
         'file-directory'
       ),
       new CommandItem(
-        'Open Dashboard',
+        'Dashboard',
         { command: 'z3dk.openDashboard', title: 'Open Dashboard' },
         'Open the Z3DK dashboard view',
         'layout'
       ),
       new CommandItem(
-        'Open Z3DK README',
+        'README',
         { command: 'z3dk.openReadme', title: 'Open Z3DK README' },
         'Open Z3DK README',
         'book'
       ),
       new CommandItem(
-        'Open Model Catalog',
+        'Model Catalog',
         { command: 'z3dk.openModelCatalog', title: 'Open Model Catalog' },
         'Open the Zelda model catalog',
         'library'
       ),
       new CommandItem(
-        'Open Model Portfolio',
+        'Model Portfolio',
         { command: 'z3dk.openModelPortfolio', title: 'Open Model Portfolio' },
         'Open the AFS model portfolio',
         'map'
       ),
       new CommandItem(
-        'Open Continue Config (TS)',
+        'Continue TS',
         { command: 'z3dk.openContinueConfigTs', title: 'Open Continue Config (TS)' },
         'Open Continue config.ts',
         'gear'
       ),
       new CommandItem(
-        'Open Continue Config (YAML)',
+        'Continue YAML',
         { command: 'z3dk.openContinueConfig', title: 'Open Continue Config (YAML)' },
         'Open Continue config.yaml',
         'gear'
       ),
       new CommandItem(
-        'Open AFS Scratchpad',
+        'AFS Scratchpad',
         { command: 'z3dk.openAfsScratchpad', title: 'Open AFS Scratchpad' },
         'Open the z3dk AFS scratchpad',
         'note'
       ),
       new CommandItem(
-        'Add AFS Context Folders',
+        'Add AFS Contexts',
         { command: 'z3dk.addAfsContexts', title: 'Add AFS Context Folders' },
         'Add .context folders to the workspace',
         'root-folder'
       ),
       new CommandItem(
-        'Build Z3DK',
+        'Build',
         { command: 'z3dk.build', title: 'Build Z3DK' },
         'Run the configured build command',
         'tools'
       ),
       new CommandItem(
-        'Run Z3DK Tests',
+        'Tests',
         { command: 'z3dk.runTests', title: 'Run Z3DK Tests' },
         'Run regression tests',
         'beaker'
       ),
       new CommandItem(
-        'Export Mesen Symbols',
+        'Symbols',
         { command: 'z3dk.exportSymbols', title: 'Export Mesen Symbols' },
         'Export Mesen .mlb symbols via yaze',
         'database'
       ),
       new CommandItem(
-        'Mesen2-OOS',
+        'Mesen2',
         { command: 'z3dk.launchMesen', title: 'Mesen2-OOS' },
         'Launch Mesen2-OOS with optional ROM args',
         'debug-alt-small'
@@ -573,31 +595,31 @@ class Z3dkCommandProvider {
         'rocket'
       ),
       new CommandItem(
-        'Export Hack Disassembly',
+        'Hack Disasm',
         { command: 'z3dk.exportDisassembly', title: 'Export Hack Disassembly' },
         'Export USDASM-style disassembly of the hack',
         'symbol-structure'
       ),
       new CommandItem(
-        'Find USDASM Label',
+        'USDASM Search',
         { command: 'z3dk.findUsdasmLabel', title: 'Find USDASM Label' },
         'Search USDASM for a label',
         'search'
       ),
       new CommandItem(
-        'Open USDASM Root',
+        'USDASM Root',
         { command: 'z3dk.openUsdasmRoot', title: 'Open USDASM Root' },
         'Open USDASM source-of-truth disassembly',
         'folder'
       ),
       new CommandItem(
-        'Open ROM Folder',
+        'ROM Folder',
         { command: 'z3dk.openRomFolder', title: 'Open ROM Folder' },
         'Reveal ROM folder in Explorer',
         'file-submodule'
       ),
       new CommandItem(
-        'Restart Language Server',
+        'Restart LSP',
         { command: 'z3dk.restartServer', title: 'Restart Language Server' },
         'Restart z3lsp',
         'refresh'
@@ -1031,11 +1053,11 @@ function buildDashboardHtml(context) {
           <h2>Quick Actions</h2>
           <div class="accent-line"></div>
           <div class="button-grid">
-            <button data-command="z3dk.build">Build Z3DK</button>
-            <button data-command="z3dk.runTests">Run Tests</button>
-            <button data-command="z3dk.exportSymbols" class="secondary">Export Symbols</button>
-            <button data-command="z3dk.restartServer" class="tertiary">Restart z3lsp</button>
-            <button data-command="z3dk.refreshDashboard" class="secondary">Refresh Dashboard</button>
+            <button data-command="z3dk.build">Build</button>
+            <button data-command="z3dk.runTests">Tests</button>
+            <button data-command="z3dk.exportSymbols" class="secondary">Symbols</button>
+            <button data-command="z3dk.restartServer" class="tertiary">Restart LSP</button>
+            <button data-command="z3dk.refreshDashboard" class="secondary">Refresh</button>
           </div>
           <div class="note">Defaulting to Asar semantics while z3dk stabilizes.</div>
         </div>
@@ -1044,11 +1066,11 @@ function buildDashboardHtml(context) {
           <h2>Integrations</h2>
           <div class="accent-line"></div>
           <div class="button-grid">
-            <button data-command="z3dk.openWorkspace">Open Dev Workspace</button>
-            <button data-command="z3dk.openReadme" class="secondary">Open Z3DK README</button>
-            <button data-command="z3dk.openOracleRepo">Open Oracle Repo</button>
-            <button data-command="z3dk.openYazeRepo" class="tertiary">Open Yaze Repo</button>
-            <button data-command="z3dk.openMesenRepo" class="secondary">Open Mesen2-OOS</button>
+            <button data-command="z3dk.openWorkspace">Workspace</button>
+            <button data-command="z3dk.openReadme" class="secondary">README</button>
+            <button data-command="z3dk.openOracleRepo">Oracle Repo</button>
+            <button data-command="z3dk.openYazeRepo" class="tertiary">Yaze Repo</button>
+            <button data-command="z3dk.openMesenRepo" class="secondary">Mesen2 Repo</button>
           </div>
         </div>
 
@@ -1058,7 +1080,7 @@ function buildDashboardHtml(context) {
           <div class="button-grid">
             <button data-command="z3dk.openModelCatalog">Model Catalog</button>
             <button data-command="z3dk.openModelPortfolio" class="secondary">Model Portfolio</button>
-            <button data-command="z3dk.openAfsScratchpad" class="tertiary">Open AFS Scratchpad</button>
+            <button data-command="z3dk.openAfsScratchpad" class="tertiary">AFS Scratchpad</button>
             <button data-command="z3dk.addAfsContexts">Add AFS Contexts</button>
           </div>
         </div>
@@ -1067,8 +1089,8 @@ function buildDashboardHtml(context) {
           <h2>Continue</h2>
           <div class="accent-line"></div>
           <div class="button-grid">
-            <button data-command="z3dk.openContinueConfigTs" class="secondary">Open config.ts</button>
-            <button data-command="z3dk.openContinueConfig">Open config.yaml</button>
+            <button data-command="z3dk.openContinueConfigTs" class="secondary">Continue TS</button>
+            <button data-command="z3dk.openContinueConfig">Continue YAML</button>
           </div>
           <div class="mini">Farore is the default chat + autocomplete model.</div>
         </div>
@@ -1079,8 +1101,8 @@ function buildDashboardHtml(context) {
           <div class="button-grid">
             <button data-command="z3dk.launchMesen">Mesen2-OOS</button>
             <button data-command="z3dk.launchYaze" class="secondary">yaze</button>
-            <button data-command="z3dk.openRomFolder" class="tertiary">Open ROM Folder</button>
-            <button data-command="z3dk.exportSymbols">Export Symbols</button>
+            <button data-command="z3dk.openRomFolder" class="tertiary">ROM Folder</button>
+            <button data-command="z3dk.exportSymbols">Symbols</button>
           </div>
           <div class="mini">Use launch args to auto-load ROM + symbols.</div>
         </div>
@@ -1089,9 +1111,9 @@ function buildDashboardHtml(context) {
           <h2>Disassembly Lab</h2>
           <div class="accent-line"></div>
           <div class="button-grid">
-            <button data-command="z3dk.exportDisassembly">Export Hack Disasm</button>
-            <button data-command="z3dk.findUsdasmLabel" class="secondary">Find USDASM Label</button>
-            <button data-command="z3dk.openUsdasmRoot" class="tertiary">Open USDASM Root</button>
+            <button data-command="z3dk.exportDisassembly">Hack Disasm</button>
+            <button data-command="z3dk.findUsdasmLabel" class="secondary">USDASM Search</button>
+            <button data-command="z3dk.openUsdasmRoot" class="tertiary">USDASM Root</button>
           </div>
           <div class="mini">USDASM is the source of truth for vanilla labels.</div>
         </div>
@@ -1137,6 +1159,12 @@ async function startClient(context) {
     return undefined;
   }
 
+  const Client = loadLanguageClient();
+  if (!Client) {
+    updateStatusBar(context);
+    return undefined;
+  }
+
   const rootDir = z3dkRoot(context) || workspaceRoot();
   const serverPath = resolveServerPath(config, rootDir);
   const serverArgs = config.get('serverArgs') || [];
@@ -1154,7 +1182,7 @@ async function startClient(context) {
     outputChannel: ensureOutputChannel()
   };
 
-  client = new LanguageClient('z3dk', 'Z3DK Language Server', serverOptions, clientOptions);
+  client = new Client('z3dk', 'Z3DK Language Server', serverOptions, clientOptions);
   context.subscriptions.push(client.start());
   updateStatusBar(context);
   return client;

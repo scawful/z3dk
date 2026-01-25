@@ -61,17 +61,17 @@ Z3DK provides Asar syntax highlighting, z3lsp language features, and Zelda 3 too
 - `Z3DK: Export Mesen Symbols (yaze)`
 - `Z3DK: Restart Language Server`
 - `Z3DK: Dashboard`
-- `Z3DK: Open Dev Workspace`
-- `Z3DK: Open Model Catalog`
-- `Z3DK: Open Model Portfolio`
-- `Z3DK: Open Continue Config (YAML)`
-- `Z3DK: Open Continue Config (TS)`
-- `Z3DK: Open AFS Scratchpad`
-- `Z3DK: Add AFS Context Folders`
-- `Z3DK: Open Oracle Repo`
-- `Z3DK: Open Yaze Repo`
-- `Z3DK: Open Mesen2-OOS Repo`
-- `Z3DK: Mesen2-OOS`
+- `Z3DK: Workspace`
+- `Z3DK: Model Catalog`
+- `Z3DK: Model Portfolio`
+- `Z3DK: Continue YAML`
+- `Z3DK: Continue TS`
+- `Z3DK: AFS Scratchpad`
+- `Z3DK: Add AFS Contexts`
+- `Z3DK: Oracle Repo`
+- `Z3DK: Yaze Repo`
+- `Z3DK: Mesen2 Repo`
+- `Z3DK: Mesen2`
 - `Z3DK: yaze`
 - `Z3DK: ROM Folder`
 - `Z3DK: Hack Disasm`

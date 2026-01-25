@@ -63,39 +63,39 @@
     "commands": [
       {
         "command": "z3dk.openWorkspace",
-        "title": "Z3DK: Open Dev Workspace"
+        "title": "Z3DK: Workspace"
       },
       {
         "command": "z3dk.openReadme",
-        "title": "Z3DK: Open README"
+        "title": "Z3DK: README"
       },
       {
         "command": "z3dk.openModelCatalog",
-        "title": "Z3DK: Open Model Catalog"
+        "title": "Z3DK: Model Catalog"
       },
       {
         "command": "z3dk.openModelPortfolio",
-        "title": "Z3DK: Open Model Portfolio"
+        "title": "Z3DK: Model Portfolio"
       },
       {
         "command": "z3dk.openContinueConfig",
-        "title": "Z3DK: Open Continue Config (YAML)"
+        "title": "Z3DK: Continue YAML"
       },
       {
         "command": "z3dk.openContinueConfigTs",
-        "title": "Z3DK: Open Continue Config (TS)"
+        "title": "Z3DK: Continue TS"
       },
       {
         "command": "z3dk.openAfsScratchpad",
-        "title": "Z3DK: Open AFS Scratchpad"
+        "title": "Z3DK: AFS Scratchpad"
       },
       {
         "command": "z3dk.addAfsContexts",
-        "title": "Z3DK: Add AFS Context Folders"
+        "title": "Z3DK: Add AFS Contexts"
       },
       {
         "command": "z3dk.runTests",
-        "title": "Z3DK: Run Tests"
+        "title": "Z3DK: Tests"
       },
       {
         "command": "z3dk.build",
@@ -103,11 +103,11 @@
       },
       {
         "command": "z3dk.exportSymbols",
-        "title": "Z3DK: Export Mesen Symbols (yaze)"
+        "title": "Z3DK: Symbols"
       },
       {
         "command": "z3dk.restartServer",
-        "title": "Z3DK: Restart Language Server"
+        "title": "Z3DK: Restart LSP"
       },
       {
         "command": "z3dk.openDashboard",
@@ -115,19 +115,19 @@
       },
       {
         "command": "z3dk.openOracleRepo",
-        "title": "Z3DK: Open Oracle Repo"
+        "title": "Z3DK: Oracle Repo"
       },
       {
         "command": "z3dk.openYazeRepo",
-        "title": "Z3DK: Open Yaze Repo"
+        "title": "Z3DK: Yaze Repo"
       },
       {
         "command": "z3dk.openMesenRepo",
-        "title": "Z3DK: Open Mesen2-OOS Repo"
+        "title": "Z3DK: Mesen2 Repo"
       },
       {
         "command": "z3dk.launchMesen",
-        "title": "Z3DK: Mesen2-OOS"
+        "title": "Z3DK: Mesen2"
       },
       {
         "command": "z3dk.launchYaze",

@@ -7,6 +7,7 @@ Z3DK provides Asar syntax highlighting, z3lsp language features, and Zelda 3 too
 - z3lsp LSP integration (completion, symbols, semantic tokens)
 - Commands for build/test and symbol export
 - Z3DK Activity Bar view with quick actions
+- Dashboard view with integration status (yaze, Mesen2, ROM paths, models, Continue)
 - Z3DK submenu in the View menu
 
 ## Quick Start (repo-local)
@@ -36,12 +37,30 @@ Z3DK provides Asar syntax highlighting, z3lsp language features, and Zelda 3 too
 - `z3dk.yazePath`: yaze binary path.
 - `z3dk.symbolFormat`: symbol format (`mesen` by default).
 - `z3dk.symbolsPath`: override output symbol path.
+- `z3dk.devWorkspacePath`: path to the multi-root dev workspace.
+- `z3dk.modelCatalogPath`: path to the Zelda model catalog.
+- `z3dk.modelPortfolioPath`: path to the AFS model portfolio.
+- `z3dk.continueConfigPath`: path to Continue config.yaml.
+- `z3dk.continueConfigTsPath`: path to Continue config.ts.
+- `z3dk.oracleRoot`: path to oracle-of-secrets repo.
+- `z3dk.yazeRoot`: path to yaze repo.
+- `z3dk.mesenRoot`: path to mesen2-oos repo.
 
 ## Commands
 - `Z3DK: Run Tests`
 - `Z3DK: Build`
 - `Z3DK: Export Mesen Symbols (yaze)`
 - `Z3DK: Restart Language Server`
+- `Z3DK: Open Dev Workspace`
+- `Z3DK: Open Model Catalog`
+- `Z3DK: Open Model Portfolio`
+- `Z3DK: Open Continue Config (YAML)`
+- `Z3DK: Open Continue Config (TS)`
+- `Z3DK: Open AFS Scratchpad`
+- `Z3DK: Add AFS Context Folders`
+- `Z3DK: Open Oracle Repo`
+- `Z3DK: Open Yaze Repo`
+- `Z3DK: Open Mesen2-OOS Repo`
 
 ## Notes
 - This extension defaults to Asar semantics (z3asm compatibility) until z3dk stabilizes.

@@ -11,13 +11,24 @@
   "activationEvents": [
     "onLanguage:asar",
     "onView:z3dk.commands",
+    "onView:z3dk.dashboard",
     "onCommand:z3dk.runTests",
     "onCommand:z3dk.build",
     "onCommand:z3dk.exportSymbols",
     "onCommand:z3dk.restartServer",
     "onCommand:z3dk.openWorkspace",
     "onCommand:z3dk.openReadme",
-    "onCommand:z3dk.refresh"
+    "onCommand:z3dk.openModelCatalog",
+    "onCommand:z3dk.openModelPortfolio",
+    "onCommand:z3dk.openContinueConfig",
+    "onCommand:z3dk.openContinueConfigTs",
+    "onCommand:z3dk.openAfsScratchpad",
+    "onCommand:z3dk.addAfsContexts",
+    "onCommand:z3dk.openOracleRepo",
+    "onCommand:z3dk.openYazeRepo",
+    "onCommand:z3dk.openMesenRepo",
+    "onCommand:z3dk.refresh",
+    "onCommand:z3dk.refreshDashboard"
   ],
   "main": "extension.js",
   "contributes": {
@@ -52,6 +63,30 @@
         "title": "Z3DK: Open README"
       },
       {
+        "command": "z3dk.openModelCatalog",
+        "title": "Z3DK: Open Model Catalog"
+      },
+      {
+        "command": "z3dk.openModelPortfolio",
+        "title": "Z3DK: Open Model Portfolio"
+      },
+      {
+        "command": "z3dk.openContinueConfig",
+        "title": "Z3DK: Open Continue Config (YAML)"
+      },
+      {
+        "command": "z3dk.openContinueConfigTs",
+        "title": "Z3DK: Open Continue Config (TS)"
+      },
+      {
+        "command": "z3dk.openAfsScratchpad",
+        "title": "Z3DK: Open AFS Scratchpad"
+      },
+      {
+        "command": "z3dk.addAfsContexts",
+        "title": "Z3DK: Add AFS Context Folders"
+      },
+      {
         "command": "z3dk.runTests",
         "title": "Z3DK: Run Tests"
       },
@@ -68,8 +103,24 @@
         "title": "Z3DK: Restart Language Server"
       },
       {
+        "command": "z3dk.openOracleRepo",
+        "title": "Z3DK: Open Oracle Repo"
+      },
+      {
+        "command": "z3dk.openYazeRepo",
+        "title": "Z3DK: Open Yaze Repo"
+      },
+      {
+        "command": "z3dk.openMesenRepo",
+        "title": "Z3DK: Open Mesen2-OOS Repo"
+      },
+      {
         "command": "z3dk.refresh",
         "title": "Z3DK: Refresh Sidebar"
+      },
+      {
+        "command": "z3dk.refreshDashboard",
+        "title": "Z3DK: Refresh Dashboard"
       }
     ],
     "viewsContainers": {
@@ -83,6 +134,10 @@
     },
     "views": {
       "z3dk": [
+        {
+          "id": "z3dk.dashboard",
+          "name": "Dashboard"
+        },
         {
           "id": "z3dk.commands",
           "name": "Commands"
@@ -112,40 +167,57 @@
           "group": "1_general"
         },
         {
+          "command": "z3dk.openModelCatalog",
+          "group": "2_resources"
+        },
+        {
+          "command": "z3dk.openModelPortfolio",
+          "group": "2_resources"
+        },
+        {
+          "command": "z3dk.openContinueConfig",
+          "group": "2_resources"
+        },
+        {
+          "command": "z3dk.openContinueConfigTs",
+          "group": "2_resources"
+        },
+        {
+          "command": "z3dk.addAfsContexts",
+          "group": "2_resources"
+        },
+        {
           "command": "z3dk.build",
-          "group": "2_actions"
+          "group": "3_actions"
         },
         {
           "command": "z3dk.runTests",
-          "group": "2_actions"
+          "group": "3_actions"
         },
         {
           "command": "z3dk.exportSymbols",
-          "group": "2_actions"
+          "group": "3_actions"
         },
         {
           "command": "z3dk.restartServer",
-          "group": "3_server"
+          "group": "4_server"
+        },
+        {
+          "command": "z3dk.openOracleRepo",
+          "group": "5_repos"
+        },
+        {
+          "command": "z3dk.openYazeRepo",
+          "group": "5_repos"
+        },
+        {
+          "command": "z3dk.openMesenRepo",
+          "group": "5_repos"
         }
       ],
       "view/title": [
         {
           "command": "z3dk.refresh",
-          "when": "view == z3dk.commands",
-          "group": "navigation"
-        },
-        {
-          "command": "z3dk.build",
-          "when": "view == z3dk.commands",
-          "group": "navigation"
-        },
-        {
-          "command": "z3dk.runTests",
-          "when": "view == z3dk.commands",
-          "group": "navigation"
-        },
-        {
-          "command": "z3dk.exportSymbols",
           "when": "view == z3dk.commands",
           "group": "navigation"
         }
@@ -158,6 +230,41 @@
           "type": "string",
           "default": "",
           "description": "Path to the multi-root dev workspace (.code-workspace)."
+        },
+        "z3dk.modelCatalogPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to MODEL_CATALOG.md for Zelda model references."
+        },
+        "z3dk.modelPortfolioPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to MODEL_PORTFOLIO.md for AFS model references."
+        },
+        "z3dk.continueConfigPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Continue config.yaml."
+        },
+        "z3dk.continueConfigTsPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Continue config.ts."
+        },
+        "z3dk.oracleRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Path to oracle-of-secrets repo (used for integrations)."
+        },
+        "z3dk.yazeRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Path to yaze repo (used for integrations)."
+        },
+        "z3dk.mesenRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Path to mesen2-oos repo (used for integrations)."
         },
         "z3dk.autoStart": {
           "type": "boolean",

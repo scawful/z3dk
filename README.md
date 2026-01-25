@@ -48,7 +48,7 @@ z3asm my_patch.asm rom.sfc --emit=lint.json --lint-no-branch --lint-no-org
 ```
 
 ### Editor Integration
-- **VS Code**: use the repo extension at `extensions/vscode-z3dk` (Asar grammar + z3lsp).
+- **VS Code**: use the repo extension at `extensions/vscode-z3dk` (Asar grammar + z3lsp + Z3DK dashboard view).
   - Dev mode: `code --extensionDevelopmentPath=~/src/hobby/z3dk/extensions/vscode-z3dk`
   - Set `z3dk.serverPath` if z3lsp is not on PATH.
 - **Emacs/Spacemacs** (eglot): `(add-to-list 'eglot-server-programs '(asm-mode . ("z3lsp")))`

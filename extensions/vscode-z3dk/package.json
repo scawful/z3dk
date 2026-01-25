@@ -1,0 +1,214 @@
+{
+  "name": "z3dk",
+  "displayName": "Z3DK Zelda Hacking Toolkit",
+  "description": "Asar syntax, z3lsp language server, and Zelda 3 tooling helpers.",
+  "version": "0.1.0",
+  "publisher": "scawful",
+  "engines": {
+    "vscode": ">=1.85.0"
+  },
+  "categories": ["Programming Languages", "Other"],
+  "activationEvents": [
+    "onLanguage:asar",
+    "onView:z3dk.commands",
+    "onCommand:z3dk.runTests",
+    "onCommand:z3dk.build",
+    "onCommand:z3dk.exportSymbols",
+    "onCommand:z3dk.restartServer",
+    "onCommand:z3dk.openWorkspace",
+    "onCommand:z3dk.openReadme",
+    "onCommand:z3dk.refresh"
+  ],
+  "main": "extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "asar",
+        "aliases": ["Asar", "z3asm"],
+        "extensions": [".asm", ".inc", ".s", ".a65", ".zasm"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "asar",
+        "scopeName": "source.asar",
+        "path": "./syntax/asar.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "asar",
+        "path": "./snippets/asar.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "z3dk.openWorkspace",
+        "title": "Z3DK: Open Dev Workspace"
+      },
+      {
+        "command": "z3dk.openReadme",
+        "title": "Z3DK: Open README"
+      },
+      {
+        "command": "z3dk.runTests",
+        "title": "Z3DK: Run Tests"
+      },
+      {
+        "command": "z3dk.build",
+        "title": "Z3DK: Build"
+      },
+      {
+        "command": "z3dk.exportSymbols",
+        "title": "Z3DK: Export Mesen Symbols (yaze)"
+      },
+      {
+        "command": "z3dk.restartServer",
+        "title": "Z3DK: Restart Language Server"
+      },
+      {
+        "command": "z3dk.refresh",
+        "title": "Z3DK: Refresh Sidebar"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "z3dk",
+          "title": "Z3DK",
+          "icon": "assets/z3dk.svg"
+        }
+      ]
+    },
+    "views": {
+      "z3dk": [
+        {
+          "id": "z3dk.commands",
+          "name": "Commands"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "z3dk.menu",
+        "label": "Z3DK"
+      }
+    ],
+    "menus": {
+      "menubar/view": [
+        {
+          "submenu": "z3dk.menu",
+          "group": "9_z3dk"
+        }
+      ],
+      "z3dk.menu": [
+        {
+          "command": "z3dk.openWorkspace",
+          "group": "1_general"
+        },
+        {
+          "command": "z3dk.openReadme",
+          "group": "1_general"
+        },
+        {
+          "command": "z3dk.build",
+          "group": "2_actions"
+        },
+        {
+          "command": "z3dk.runTests",
+          "group": "2_actions"
+        },
+        {
+          "command": "z3dk.exportSymbols",
+          "group": "2_actions"
+        },
+        {
+          "command": "z3dk.restartServer",
+          "group": "3_server"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "z3dk.refresh",
+          "when": "view == z3dk.commands",
+          "group": "navigation"
+        },
+        {
+          "command": "z3dk.build",
+          "when": "view == z3dk.commands",
+          "group": "navigation"
+        },
+        {
+          "command": "z3dk.runTests",
+          "when": "view == z3dk.commands",
+          "group": "navigation"
+        },
+        {
+          "command": "z3dk.exportSymbols",
+          "when": "view == z3dk.commands",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Z3DK",
+      "properties": {
+        "z3dk.devWorkspacePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the multi-root dev workspace (.code-workspace)."
+        },
+        "z3dk.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-start z3lsp when opening Asar files."
+        },
+        "z3dk.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the z3lsp binary. Leave empty to auto-detect (build/*/src/z3lsp/z3lsp or PATH)."
+        },
+        "z3dk.serverArgs": {
+          "type": "array",
+          "default": [],
+          "items": {"type": "string"},
+          "description": "Additional arguments to pass to z3lsp."
+        },
+        "z3dk.buildCommand": {
+          "type": "string",
+          "default": "cmake --build build",
+          "description": "Command to build z3dk tools."
+        },
+        "z3dk.testCommand": {
+          "type": "string",
+          "default": "./run_tests.sh",
+          "description": "Command to run z3dk regression tests."
+        },
+        "z3dk.yazePath": {
+          "type": "string",
+          "default": "yaze",
+          "description": "Path to the yaze executable used for symbol export."
+        },
+        "z3dk.romPath": {
+          "type": "string",
+          "default": "",
+          "description": "ROM path to use for symbol export (required for export command)."
+        },
+        "z3dk.symbolFormat": {
+          "type": "string",
+          "default": "mesen",
+          "description": "Symbol format to export (mesen, wla, nocash, etc)."
+        },
+        "z3dk.symbolsPath": {
+          "type": "string",
+          "default": "",
+          "description": "Override symbol output path. Defaults to <rom>.mlb for mesen and <rom>.sym otherwise."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

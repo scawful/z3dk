@@ -1,0 +1,70 @@
+{
+  "org block": {
+    "prefix": "org",
+    "body": [
+      "org $${1:8000}",
+      "${2:Label}:",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "ORG block with label"
+  },
+  "pushpc/pullpc": {
+    "prefix": "pushpc",
+    "body": [
+      "pushpc",
+      "org $${1:8000}",
+      "${2:Label}:",
+      "{",
+      "\t$0",
+      "}",
+      "pullpc"
+    ],
+    "description": "pushpc/org block/pullpc"
+  },
+  "namespace": {
+    "prefix": "namespace",
+    "body": [
+      "namespace ${1:Oracle}",
+      "{",
+      "\t$0",
+      "}",
+      "namespace off"
+    ],
+    "description": "Namespace block"
+  },
+  "macro": {
+    "prefix": "macro",
+    "body": [
+      "macro ${1:MyMacro}(${2:args})",
+      "{",
+      "\t$0",
+      "}",
+      "endmacro"
+    ],
+    "description": "Macro definition"
+  },
+  "function": {
+    "prefix": "function",
+    "body": [
+      "function ${1:MyFunc}(${2:args}) = ${3:expr}"
+    ],
+    "description": "Function definition"
+  },
+  "incsrc": {
+    "prefix": "incsrc",
+    "body": ["incsrc \"${1:path/to/file.asm}\""],
+    "description": "Include a source file"
+  },
+  "incbin": {
+    "prefix": "incbin",
+    "body": ["incbin \"${1:path/to/file.bin}\""],
+    "description": "Include a binary file"
+  },
+  "log section": {
+    "prefix": "log_section",
+    "body": ["%log_section(\"${1:Section}\", ${2:!LOG_SECTION})"],
+    "description": "Z3DK logging macro"
+  }
+}

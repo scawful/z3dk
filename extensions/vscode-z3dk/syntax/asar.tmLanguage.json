@@ -1,0 +1,97 @@
+{
+  "name": "Asar",
+  "scopeName": "source.asar",
+  "patterns": [
+    {"include": "#comments"},
+    {"include": "#strings"},
+    {"include": "#labels"},
+    {"include": "#directives"},
+    {"include": "#opcodes"},
+    {"include": "#registers"},
+    {"include": "#defines"},
+    {"include": "#macros"},
+    {"include": "#numbers"}
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {"name": "comment.line.semicolon.asar", "match": ";.*$"},
+        {"name": "comment.line.double-slash.asar", "match": "//.*$"},
+        {"name": "comment.block.asar", "begin": "/\\*", "end": "\\*/"}
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {"name": "string.quoted.double.asar", "begin": "\"", "end": "\""},
+        {"name": "string.quoted.single.asar", "begin": "'", "end": "'"}
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.label.asar",
+          "match": "^\\s*[A-Za-z_.][A-Za-z0-9_.]*:"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.directive.asar",
+          "match": "(?i)\\b(?:arch|autoclean|base|banksize|check|cleartable|db|dw|dl|dd|define|undef|incbin|incsrc|include|incdir|includefrom|org|pushpc|pullpc|pushbase|pullbase|pushns|pullns|namespace|endnamespace|macro|endmacro|function|endfunction|if|elseif|else|endif|while|endwhile|for|endfor|table|pulltable|freedata|freecode|freespace|prot|pad|padbyte|padword|fill|fillbyte|fillword|align|skip|startpos|spcblock|endspcblock|print|warn|warning|error|assert|mapper|lorom|hirom|exlorom|exhirom|sa1rom|sfxrom|norom|asar|priority|title|incbin|incsrc)\\b"
+        }
+      ]
+    },
+    "opcodes": {
+      "patterns": [
+        {
+          "name": "keyword.opcode.65816.asar",
+          "match": "(?i)\\b(?:ADC|AND|ASL|BCC|BCS|BEQ|BIT|BMI|BNE|BPL|BRA|BRK|BRL|BVC|BVS|CLC|CLD|CLI|CLV|CMP|COP|CPX|CPY|DEC|DEX|DEY|EOR|INC|INX|INY|JML|JMP|JSL|JSR|LDA|LDX|LDY|LSR|MVN|MVP|NOP|ORA|PEA|PEI|PER|PHA|PHB|PHD|PHK|PHP|PHX|PHY|PLA|PLB|PLD|PLP|PLX|PLY|REP|ROL|ROR|RTI|RTL|RTS|SBC|SEC|SED|SEI|SEP|STA|STP|STX|STY|STZ|TAX|TAY|TCD|TCS|TDC|TRB|TSB|TSC|TSX|TXA|TXS|TXY|TYA|TYX|WAI|WDM|XBA|XCE)\\b"
+        },
+        {
+          "name": "keyword.opcode.spc700.asar",
+          "match": "(?i)\\b(?:ADC|ADDW|AND|AND1|ASL|BBC|BBS|BCC|BCS|BEQ|BNE|BPL|BMI|BVC|BVS|BRA|BRK|CALL|CBNE|CLR1|CLRC|CLRP|CLRV|CMP|CMPW|DAA|DAS|DBNZ|DEC|DECW|DI|DIV|EI|EOR|INC|INCW|JMP|LSR|MOV|MOV1|MOVW|MUL|NOP|NOT1|OR|OR1|PCALL|POP|PUSH|RET|RETI|ROL|ROR|SBC|SET1|SETP|SLEEP|STOP|SUBW|TCALL|TCLR1|TSET1|XCN)\\b"
+        },
+        {
+          "name": "keyword.opcode.superfx.asar",
+          "match": "(?i)\\b(?:ADC|ADD|AND|ASR|BIC|CACHE|CMODE|CMP|COLOR|DEC|DIV2|FMULT|FROM|GETB|GETBH|GETBL|GETC|HIB|IBT|INC|IWT|JMP|LDB|LDW|LINK|LOB|LOOP|LSR|MERGE|MOVE|MOVES|MULT|NOP|NOT|OR|PLOT|RAMB|ROL|ROMB|ROR|SBK|SEX|SMS|STB|STOP|STW|SUB|SWAP|TO|UMULT|WITH|XOR)\\b"
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.language.register.asar",
+          "match": "(?i)\\b(?:A|X|Y|S|P|D|DB|DP|PC|SP|PB)\\b"
+        }
+      ]
+    },
+    "defines": {
+      "patterns": [
+        {
+          "name": "variable.other.define.asar",
+          "match": "![A-Za-z_][A-Za-z0-9_.]*"
+        }
+      ]
+    },
+    "macros": {
+      "patterns": [
+        {
+          "name": "support.function.macro.asar",
+          "match": "%[A-Za-z_][A-Za-z0-9_.]*"
+        },
+        {
+          "name": "entity.name.function.asar",
+          "match": "@[A-Za-z_][A-Za-z0-9_.]*"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {"name": "constant.numeric.hex.asar", "match": "\\$[0-9A-Fa-f]+"},
+        {"name": "constant.numeric.binary.asar", "match": "%[01]+"},
+        {"name": "constant.numeric.decimal.asar", "match": "\\b[0-9]+\\b"}
+      ]
+    }
+  }
+}

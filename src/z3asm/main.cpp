@@ -955,11 +955,14 @@ bool do_line_logic(const char* line, const char* filename, int lineno)
 
 		callstack_push cs_push(callstack_entry_type::LINE, current_line, lineno);
 
-		if (stribegin(current_line, "macro ") && numif==numtrue)
+		string trimmed_line = current_line;
+		strip_whitespace(trimmed_line);
+
+		if (stribegin(trimmed_line, "macro ") && numif==numtrue)
 		{
 			// RPG Hacker: Slight redundancy here with code that is
 			// also in startmacro(). Could improve this for Asar 2.0.
-			string macro_name = current_line.data()+6;
+			string macro_name = trimmed_line.data()+6;
 			char * startpar=strqchr(macro_name.data(), '(');
 			if (startpar) *startpar=0;
 			macro_defs.append(macro_name);
@@ -975,7 +978,7 @@ bool do_line_logic(const char* line, const char* filename, int lineno)
 				else tomacro(current_line);
 			}
 		}
-		else if (!stricmp(current_line, "endmacro") && numif==numtrue)
+		else if (!stricmp(trimmed_line, "endmacro") && numif==numtrue)
 		{
 			if (in_macro_def == 0) asar_throw_error(0, error_type_line, error_id_misplaced_endmacro);
 			else
@@ -989,15 +992,15 @@ bool do_line_logic(const char* line, const char* filename, int lineno)
 				}
 			}
 		}
-		        else if (stribegin(current_line, "hook ") && numif==numtrue)
+		        else if (stribegin(trimmed_line, "hook ") && numif==numtrue)
 		        {
 		            in_hook_def++;
-		            hook_defs.append(current_line);
+		            hook_defs.append(trimmed_line);
 		            if (!pass)
 		            {
 		                if (in_hook_def == 1) 
 		                {
-		                    const char* p = current_line.data() + 5;
+		                    const char* p = trimmed_line.data() + 5;
 		                    while (is_space(*p)) p++;
 		                    string addr_str;
 		                    while (*p && !is_space(*p) && *p != ',') addr_str += *p++;
@@ -1010,7 +1013,7 @@ bool do_line_logic(const char* line, const char* filename, int lineno)
 		                else tomacro(current_line);
 		            }
 		        }
-		        else if (!stricmp(current_line, "endhook") && numif==numtrue)
+		        else if (!stricmp(trimmed_line, "endhook") && numif==numtrue)
 		        {
 		            if (in_hook_def == 0) asar_throw_error(0, error_type_line, error_id_endhook_without_hook);
 		            else
@@ -1036,7 +1039,7 @@ bool do_line_logic(const char* line, const char* filename, int lineno)
 		
 		                        char macro_name[64];
 		                        sprintf(macro_name, "___z3dk_hook_at_%06X", addr);
-		                        string stripped_args = string(macro_name) + "|" + hex(addr, 6).data() + "|" + type_str.data();
+		                        string stripped_args = string(macro_name) + "|$" + hex(addr, 6).data() + "|" + type_str.data();
 		                        string final_cmd = string("hook_internal ") + stripped_args.data();
 		                        assembleblock(final_cmd.data(), single_line_for_tracker);
 		                    }
@@ -1058,7 +1061,7 @@ bool do_line_logic(const char* line, const char* filename, int lineno)
 		
 		                        char macro_name[64];
 		                        sprintf(macro_name, "___z3dk_hook_at_%06X", addr);
-		                        string stripped_args = string(macro_name) + "|" + hex(addr, 6).data() + "|" + type_str.data();
+		                        string stripped_args = string(macro_name) + "|$" + hex(addr, 6).data() + "|" + type_str.data();
 		                        string final_cmd = string("hook_internal ") + stripped_args.data();
 		                        assembleblock(final_cmd.data(), single_line_for_tracker);
 		                    }

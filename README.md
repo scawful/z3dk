@@ -67,6 +67,7 @@ optional reason after `:` (used in diagnostics). `lsp_log_enabled` toggles z3lsp
 # Uses settings from z3dk.toml if present
 z3asm src/main.asm game.sfc
 ```
+CLI output is quiet by default. Pass `--summary` to show the result/summary line items, or `--no-summary` to force them off.
 
 **Disassembly:**
 ```bash

@@ -1866,11 +1866,12 @@ void assembleblock(const char * block, int& single_line_for_tracker)
 
 		string fs_cmd = "freecode";
 		assembleblock(fs_cmd, single_line_for_tracker);
+		int hook_freespace_id = freespaceid;
 		
 		string label_name = STR"___z3dk_hook_impl_" + hex(target_addr, 6);
-		addlabel(label_name.data(), snespos, true);
+		setlabel(label_name, -1, true);
 
-		string macro_call = string(macro_name.data()) + "()";
+		string macro_call = string("%") + macro_name.data() + "()";
 		assembleblock(macro_call.data(), single_line_for_tracker);
 
 		if (is_jsl) {
@@ -1881,9 +1882,15 @@ void assembleblock(const char * block, int& single_line_for_tracker)
 			assembleblock(rts, single_line_for_tracker);
 		}
 
+		if (hook_freespace_id > 0) freespaces[hook_freespace_id].leaked = false;
+		freespaceend();
+
+		bool old_snespos_valid = snespos_valid;
 		push_pc();
 		snespos = (int)target_addr;
 		realsnespos = (int)target_addr;
+		startpos = (int)target_addr;
+		realstartpos = (int)target_addr;
 		snespos_valid = true;
 
 		if (is_jsl) {
@@ -1901,6 +1908,7 @@ void assembleblock(const char * block, int& single_line_for_tracker)
 		}
 
 		pop_pc();
+		snespos_valid = old_snespos_valid;
 	}
 	else if (is1("base"))
 	{
@@ -2263,7 +2271,69 @@ void assembleblock(const char * block, int& single_line_for_tracker)
 	}
 	else if (is("incbin"))
 	{
-		// ... existing incbin code ...
+		if (numwords < 2) asar_throw_error(0, error_type_block, error_id_broken_incbin);
+
+		string arg = par;
+		char * arg_raw = arg.temp_raw();
+		if (strchr(arg_raw, '\\')) asar_throw_error(0, error_type_block, error_id_platform_paths);
+		char * range_sep = strqchr(arg_raw, ':');
+		string filename;
+		const char * range = nullptr;
+		if (range_sep)
+		{
+			*range_sep = 0;
+			filename = safedequote(arg_raw);
+			range = range_sep + 1;
+		}
+		else
+		{
+			filename = safedequote(arg_raw);
+		}
+
+		string absolute_path = filesystem->create_absolute_path(get_current_file_name(), filename);
+		char * data = nullptr;
+		int len = 0;
+		if (!readfile(absolute_path.data(), "", &data, &len))
+		{
+			asar_throw_error(0, error_type_block, vfile_error_to_error_id(asar_get_last_io_error()), filename.data());
+		}
+		autoptr<char*> datacopy = data;
+
+		int start = 0;
+		int end = len;
+		if (range && *range)
+		{
+			string range_str = range;
+			strip_whitespace(range_str);
+			char * range_raw = range_str.temp_raw();
+			char * dots = strstr(range_raw, "..");
+			if (dots)
+			{
+				*dots = 0;
+				char * start_str = range_raw;
+				char * end_str = dots + 2;
+				strip_whitespace(start_str);
+				strip_whitespace(end_str);
+				if (*start_str) {
+					start = (int)getnum(start_str);
+					if (foundlabel && !foundlabel_static) asar_throw_error(0, error_type_block, error_id_no_labels_here);
+				}
+				if (*end_str) {
+					end = (int)getnum(end_str);
+					if (foundlabel && !foundlabel_static) asar_throw_error(0, error_type_block, error_id_no_labels_here);
+				}
+			}
+			else
+			{
+				start = (int)getnum(range_raw);
+				if (foundlabel && !foundlabel_static) asar_throw_error(0, error_type_block, error_id_no_labels_here);
+			}
+		}
+
+		if (start < 0 || end < 0 || start > end || end > len) asar_throw_error(0, error_type_block, error_id_broken_incbin);
+
+		for (int i = start; i < end; i++) write1((unsigned char)data[i]);
+		add_addr_to_line(addrToLinePos);
 	}
 	else if (is("incgfx"))
 	{

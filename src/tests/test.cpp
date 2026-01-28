@@ -1012,7 +1012,7 @@ int main(int argc, char * argv[])
 			char cmd[1024];
 			// randomdude999: temp workaround: using $ in command line is unsafe on linux, so use dec representation instead (for !cmddefined3)
 			snprintf(cmd, sizeof(cmd),
-				"\"%s\" -I\"%s\" -Dcli_only=\\$1 -Dcmddefined -D!cmddefined2= --define \" !cmddefined3 = 16,240,224 \""
+				"\"%s\" --no-summary -I\"%s\" -Dcli_only=\\$1 -Dcmddefined -D!cmddefined2= --define \" !cmddefined3 = 16,240,224 \""
 				// RPG Hacker: 日本語������ǵ in UTF-8
 				" -Dcmdl_define_utf8=\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\xf0\x9f\x87\xaf\xf0\x9f\x87\xb5"
 				" \"%s\" \"%s\"",

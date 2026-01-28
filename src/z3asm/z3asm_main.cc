@@ -58,6 +58,7 @@ struct CliOptions {
   bool lint_warn_unknown_width = true;
   bool lint_warn_branch_outside_bank = true;
   bool lint_warn_org_collision = true;
+  bool show_summary = false;
   bool show_help = false;
   bool show_version = false;
   bool is_init = false;
@@ -85,6 +86,8 @@ void PrintUsage(const char* name) {
       << "  --lint-no-unknown-width  Disable M/X unknown width warnings\n"
       << "  --lint-no-branch         Disable branch-outside-bank warnings\n"
       << "  --lint-no-org            Disable ORG collision warnings\n"
+      << "  --summary                Enable CLI summary output\n"
+      << "  --no-summary             Disable CLI summary output\n"
       << "  --version                Show version\n"
       << "  --help                   Show this message\n";
 }
@@ -260,6 +263,14 @@ bool ParseArgs(int argc, const char* argv[], CliOptions* options,
     }
     if (arg == "--lint-no-org") {
       options->lint_warn_org_collision = false;
+      continue;
+    }
+    if (arg == "--summary") {
+      options->show_summary = true;
+      continue;
+    }
+    if (arg == "--no-summary") {
+      options->show_summary = false;
       continue;
     }
     if (arg.rfind("-I", 0) == 0) {
@@ -786,22 +797,25 @@ int main(int argc, const char* argv[]) {
     std::cout << "Assembling completed without problems.\n";
   }
 
-  // CLI Summary
-  bool out_tty = isatty(fileno(stdout));
-  if (out_tty) {
-    std::cout << "\n" << (result.success ? kColorGreen : kColorRed) << "Result: " 
-              << (result.success ? "SUCCESS" : "FAILURE") << kColorReset << "\n";
-  } else {
-    std::cout << "\nResult: " << (result.success ? "SUCCESS" : "FAILURE") << "\n";
-  }
+  if (options.show_summary) {
+    // CLI Summary
+    bool out_tty = isatty(fileno(stdout));
+    if (out_tty) {
+      std::cout << "\n" << (result.success ? kColorGreen : kColorRed) << "Result: "
+                << (result.success ? "SUCCESS" : "FAILURE") << kColorReset << "\n";
+    } else {
+      std::cout << "\nResult: " << (result.success ? "SUCCESS" : "FAILURE") << "\n";
+    }
 
-  int total_bytes = 0;
-  for (const auto& block : result.written_blocks) {
-    total_bytes += block.num_bytes;
-  }
+    int total_bytes = 0;
+    for (const auto& block : result.written_blocks) {
+      total_bytes += block.num_bytes;
+    }
 
-  std::cout << "Summary: " << total_errors << " errors, " << total_warnings << " warnings, " 
-            << (out_tty ? kColorCyan : "") << total_bytes << (out_tty ? kColorReset : "") << " bytes written.\n";
+    std::cout << "Summary: " << total_errors << " errors, " << total_warnings << " warnings, "
+              << (out_tty ? kColorCyan : "") << total_bytes << (out_tty ? kColorReset : "")
+              << " bytes written.\n";
+  }
 
   return result.success ? 0 : 1;
 }

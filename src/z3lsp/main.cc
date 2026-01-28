@@ -28,6 +28,34 @@ using json = nlohmann::json;
 
 namespace {
 
+void Log(const std::string& msg) {
+  static std::string log_path = []() {
+    std::string dir;
+    try {
+      dir = fs::temp_directory_path().string();
+    } catch (...) {
+      const char* tmp = std::getenv("TMPDIR");
+      if (!tmp || !*tmp) {
+        tmp = std::getenv("TEMP");
+      }
+      if (!tmp || !*tmp) {
+        tmp = std::getenv("TMP");
+      }
+      if (tmp && *tmp) {
+        dir = tmp;
+      }
+    }
+    if (dir.empty()) {
+      dir = "/tmp";
+    }
+    return (fs::path(dir) / "z3lsp.log").string();
+  }();
+  static std::ofstream log_file(log_path, std::ios::app);
+  if (log_file.is_open()) {
+    log_file << msg << std::endl;
+  }
+}
+
 struct DocumentState {
   std::string uri;
   std::string path;
@@ -504,7 +532,11 @@ class MesenClient {
     
     try {
       return json::parse(response);
+    } catch (const std::exception& e) {
+      Log("MesenClient JSON parse error: " + std::string(e.what()));
+      return std::nullopt;
     } catch (...) {
+      Log("MesenClient JSON parse error: unknown exception");
       return std::nullopt;
     }
   }
@@ -795,7 +827,11 @@ std::optional<json> ReadMessage() {
   std::cin.read(payload.data(), content_length);
   try {
     return json::parse(payload);
+  } catch (const std::exception& e) {
+    Log("LSP ReadMessage JSON parse error: " + std::string(e.what()));
+    return std::nullopt;
   } catch (...) {
+    Log("LSP ReadMessage JSON parse error: unknown exception");
     return std::nullopt;
   }
 }
@@ -2007,6 +2043,11 @@ DocumentState AnalyzeDocument(const DocumentState& doc,
   } else {
     lint_options.warn_unauthorized_hook = false;
   }
+  
+  // Memory Protection
+  if (!config.prohibited_memory_ranges.empty()) {
+      lint_options.prohibited_memory_ranges = config.prohibited_memory_ranges;
+  }
 
   // Parse Assume Hints
   {
@@ -2093,7 +2134,11 @@ DocumentState AnalyzeDocument(const DocumentState& doc,
           lint_options.known_hooks.push_back(entry);
         }
       }
-    } catch (...) {}
+    } catch (const std::exception& e) {
+      Log("LSP JSON error: " + std::string(e.what()));
+    } catch (...) {
+      Log("LSP JSON error: unknown exception");
+    }
   }
 
   z3dk::LintResult lint_result = z3dk::RunLint(result, lint_options);
@@ -2486,7 +2531,11 @@ std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
         hover["contents"] = { {"kind", "markdown"}, {"value", hover_text.str()} };
         return hover;
       }
-    } catch (...) {}
+    } catch (const std::exception& e) {
+      Log("LSP JSON error: " + std::string(e.what()));
+    } catch (...) {
+      Log("LSP JSON error: unknown exception");
+    }
   }
 
   // Check if token is a 65816 opcode (opcode_descs is already a hash map)
@@ -3270,6 +3319,7 @@ int main(int argc, char** argv) {
              }
              if (line > end_line) break;
              
+             // Hex Address Hints
              if (doc.text[i] == '$') {
                  size_t j = i + 1;
                  while (j < doc.text.size() && std::isxdigit(static_cast<unsigned char>(doc.text[j]))) {
@@ -3297,6 +3347,103 @@ int main(int argc, char** argv) {
                  i = j - 1;
                  continue;
              }
+             
+             // Macro Hints
+             auto is_ident_start = [](char c) { 
+               return std::isalpha(static_cast<unsigned char>(c)) != 0 || c == '_' || c == '.' || c == '+' || c == '!'; 
+             };
+             auto is_ident_char = [](char c) { 
+               return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' || c == '.' || c == '+' || c == '!'; 
+             };
+
+             if (is_ident_start(doc.text[i])) {
+                 size_t start = i;
+                 size_t j = i;
+                 while (j < doc.text.size() && is_ident_char(doc.text[j])) {
+                     j++;
+                 }
+                 size_t len = j - start;
+                 
+                 if (len > 0 && line >= start_line) {
+                     std::string word = doc.text.substr(start, len);
+                     std::string clean = word;
+                     if (clean.size() > 1 && clean[0] == '+') clean = clean.substr(1);
+
+                     const DocumentState::SymbolEntry* macro = nullptr;
+                     for (const auto& s : doc.symbols) {
+                         if (s.kind == 12 && s.name == clean) { macro = &s; break; }
+                     }
+                     if (!macro && workspace.symbol_index.count(clean)) {
+                         for (const auto& s : workspace.symbol_index.at(clean)) {
+                             if (s.kind == 12) { macro = &s; break; }
+                         }
+                     }
+
+                     if (macro && !macro->parameters.empty()) {
+                         // Look ahead for '('
+                         size_t k = j;
+                         int col_off = 0;
+                         while (k < doc.text.size() && doc.text[k] != '\n' &&
+                                std::isspace(static_cast<unsigned char>(doc.text[k]))) {
+                             k++;
+                             col_off++;
+                         }
+                         
+                         if (k < doc.text.size() && doc.text[k] == '(') {
+                             k++; // skip '('
+                             col_off++;
+                             
+                             // Add first param hint
+                             result.push_back({
+                                 {"position", {{"line", line}, {"character", col + (int)len + col_off}}},
+                                 {"label", macro->parameters[0] + ":"},
+                                 {"kind", 2},
+                                 {"paddingRight", true}
+                             });
+
+                             // Parse rest (basic csv info parens)
+                             int p_idx = 1;
+                             int bal = 0;
+                             bool in_str = false;
+                             int arg_col_off = col + (int)len + col_off;
+                             
+                             while(k < doc.text.size() && doc.text[k] != '\n' && p_idx < macro->parameters.size()) {
+                                 char c = doc.text[k];
+                                 if(c == '"') in_str = !in_str;
+                                 else if(!in_str) {
+                                     if(c == '(') bal++;
+                                     else if(c == ')') {
+                                         if(bal == 0) break;
+                                         bal--;
+                                     } else if(c == ',' && bal == 0) {
+                                         k++;
+                                         arg_col_off++;
+                                         while(k < doc.text.size() && doc.text[k] != '\n' &&
+                                               std::isspace(static_cast<unsigned char>(doc.text[k]))) {
+                                             k++;
+                                             arg_col_off++;
+                                         }
+                                         result.push_back({
+                                             {"position", {{"line", line}, {"character", arg_col_off}}},
+                                             {"label", macro->parameters[p_idx] + ":"},
+                                             {"kind", 2},
+                                             {"paddingRight", true}
+                                         });
+                                         p_idx++;
+                                         continue;
+                                     }
+                                 }
+                                 k++;
+                                 arg_col_off++;
+                             }
+                         }
+                     }
+                 }
+                 col += (int)len;
+                 i = j - 1;
+                 continue;
+             }
+
              col++;
         }
       }

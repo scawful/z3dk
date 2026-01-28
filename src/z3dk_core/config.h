@@ -1,11 +1,18 @@
 #ifndef Z3DK_CORE_CONFIG_H
 #define Z3DK_CORE_CONFIG_H
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace z3dk {
+
+struct MemoryRange {
+  uint32_t start;
+  uint32_t end;
+  std::string reason;
+};
 
 struct Config {
   std::optional<std::string> preset;
@@ -20,6 +27,7 @@ struct Config {
   std::optional<int> rom_size;
   std::optional<std::string> symbols_format;
   std::optional<std::string> symbols_path;
+  std::vector<MemoryRange> prohibited_memory_ranges;
   std::optional<bool> warn_unused_symbols;
   std::optional<bool> warn_branch_outside_bank;
   std::optional<bool> warn_unknown_width;

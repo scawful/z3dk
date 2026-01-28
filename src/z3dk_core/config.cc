@@ -214,12 +214,53 @@ int ArrayBracketDelta(std::string_view value) {
   return delta;
 }
 
+bool ParseAddress(std::string_view value, uint32_t* out) {
+  std::string trimmed = Trim(value);
+  if (trimmed.empty()) {
+    return false;
+  }
+  if (trimmed.front() == '$') {
+    trimmed.erase(0, 1);
+  }
+  char* end_ptr = nullptr;
+  unsigned long parsed = std::strtoul(trimmed.c_str(), &end_ptr, 0);
+  if (end_ptr == trimmed.c_str() || *end_ptr != '\0') {
+    return false;
+  }
+  *out = static_cast<uint32_t>(parsed);
+  return true;
+}
+
+MemoryRange ParseMemoryRange(std::string_view value) {
+  std::string s = ParseStringValue(value);
+  MemoryRange range{0, 0, ""};
+  auto dash = s.find('-');
+  if (dash == std::string::npos) return range;
+  auto colon = s.find(':', dash);
+  
+  std::string start_str = s.substr(0, dash);
+  std::string end_str = s.substr(dash + 1, colon != std::string::npos ? colon - dash - 1 : std::string::npos);
+
+  uint32_t start = 0;
+  uint32_t end = 0;
+  if (!ParseAddress(start_str, &start) || !ParseAddress(end_str, &end) || end < start) {
+    return range;
+  }
+  range.start = start;
+  range.end = (end == UINT32_MAX) ? end : end + 1;
+  if (colon != std::string::npos) {
+    range.reason = Trim(s.substr(colon + 1));
+  }
+  return range;
+}
+
 }  // namespace
 
 bool IsArrayKey(const std::string& key) {
   return key == "include_paths" || key == "defines" || key == "emit" ||
          key == "emits" || key == "main" || key == "main_file" ||
-         key == "main_files" || key == "entry" || key == "entry_files";
+         key == "main_files" || key == "entry" || key == "entry_files" ||
+         key == "prohibited_memory_ranges";
 }
 
 void ApplyArrayKey(Config* config, const std::string& key, std::string_view value) {
@@ -233,6 +274,13 @@ void ApplyArrayKey(Config* config, const std::string& key, std::string_view valu
     config->defines = std::move(items);
   } else if (key == "emit" || key == "emits") {
     config->emits = std::move(items);
+  } else if (key == "prohibited_memory_ranges") {
+    for (const auto& item : items) {
+      MemoryRange range = ParseMemoryRange(item);
+      if (range.end > range.start) {
+        config->prohibited_memory_ranges.push_back(std::move(range));
+      }
+    }
   } else {
     config->main_files = std::move(items);
   }
@@ -330,6 +378,8 @@ Config LoadConfigFile(const std::string& path, std::string* error) {
       config.warn_org_collision = ParseBool(value);
     } else if (key == "warn_unauthorized_hook") {
       config.warn_unauthorized_hook = ParseBool(value);
+    } else if (key == "prohibited_memory_ranges") {
+      ApplyArrayKey(&config, key, value);
     }
   }
 

@@ -128,6 +128,7 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
           }
         }
       }
+      
     }
     
     // Bank Capacity
@@ -165,6 +166,31 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
         message += buffer;
         AddDiagnostic(&out, DiagnosticSeverity::kError, message, curr.start,
                       sources);
+      }
+    }
+  }
+
+  // Prohibited Memory Ranges (independent of ORG collision)
+  if (!options.prohibited_memory_ranges.empty()) {
+    for (const auto& block : result.written_blocks) {
+      if (block.num_bytes <= 0) {
+        continue;
+      }
+      uint32_t start = static_cast<uint32_t>(block.snes_offset);
+      uint32_t end = static_cast<uint32_t>(block.snes_offset + block.num_bytes);
+      for (const auto& prohibited : options.prohibited_memory_ranges) {
+        // Check for overlap: max(start1, start2) < min(end1, end2)
+        if (std::max(start, prohibited.start) < std::min(end, prohibited.end)) {
+          std::string message = "Write to prohibited memory range";
+          if (!prohibited.reason.empty()) {
+             message += ": " + prohibited.reason;
+          }
+          char buf[128];
+          std::snprintf(buf, sizeof(buf), " ($%06X-$%06X overlaps prohibited $%06X-$%06X)",
+                        start, end - 1, prohibited.start, prohibited.end - 1);
+          message += buf;
+          AddDiagnostic(&out, DiagnosticSeverity::kError, message, start, sources);
+        }
       }
     }
   }

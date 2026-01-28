@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "z3dk_core/assembler.h"
+#include "z3dk_core/config.h"
 
 namespace z3dk {
 
@@ -23,6 +24,7 @@ struct LintOptions {
   bool warn_unauthorized_hook = true;
   int warn_bank_full_percent = 0; // e.g. 95 for 95%
   std::vector<Hook> known_hooks;
+  std::vector<MemoryRange> prohibited_memory_ranges;
   
   struct StateOverride {
     uint32_t address;

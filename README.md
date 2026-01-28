@@ -42,6 +42,9 @@ rom_size = 0x200000      # 2MB
 include_paths = ["src", "include"]
 symbols = "wla"          # Generates .sym file
 warn_unused_symbols = true
+prohibited_memory_ranges = [
+  "$7E0000-$7E01FF: SRAM scratchpad"
+]
 
 # Define compilation targets
 emit = [
@@ -50,6 +53,9 @@ emit = [
   "hooks.json"           # For Z3DK hook tracking
 ]
 ```
+
+`prohibited_memory_ranges` accepts inclusive SNES address ranges. You can use `$` or `0x` prefixes and add an
+optional reason after `:` (used in diagnostics).
 
 ### 3. Usage
 

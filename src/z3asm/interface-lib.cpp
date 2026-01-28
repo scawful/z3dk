@@ -67,6 +67,7 @@ static int numwarn;
 struct labeldata {
 	const char * name;
 	int location;
+	bool used;
 };
 
 /* $EXPORTSTRUCT$
@@ -236,6 +237,7 @@ static void addlabel(const string & name, const snes_label & label_data)
 	labeldata label;
 	label.name = strdup(name);
 	label.location = (int)(label_data.pos & 0xFFFFFF);
+	label.used = label_data.used;
 	ldata[labelsinldata++] = label;
 }
 

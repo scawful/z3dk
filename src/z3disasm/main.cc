@@ -37,6 +37,7 @@ struct LabelIndex {
 struct Options {
   fs::path rom_path;
   fs::path symbols_path;
+  fs::path labels_path;
   fs::path hooks_path;
   bool hooks_auto = false;
   fs::path out_dir;
@@ -53,6 +54,7 @@ void PrintUsage(const char* name) {
             << "Options:\n"
             << "  --rom <path>         ROM file to disassemble\n"
             << "  --symbols <path>     Optional .sym/.mlb symbols file\n"
+            << "  --labels <path>      Optional label map (.csv/.sym/.mlb)\n"
       << "  --hooks [path]       Optional hooks.json manifest (defaults to hooks.json near ROM)\n"
             << "  --out <dir>          Output directory for bank_XX.asm\n"
             << "  --bank-start <hex>   First bank to emit (default 0)\n"
@@ -241,12 +243,91 @@ bool LoadSymbolsSym(const fs::path& path, LabelIndex* index) {
   return true;
 }
 
+bool LoadLabelsCsv(const fs::path& path, LabelIndex* index) {
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return false;
+  }
+  std::string line;
+  bool header = true;
+  while (std::getline(file, line)) {
+    if (header) {
+      header = false;
+      continue;
+    }
+    std::string cleaned = Trim(line);
+    if (cleaned.empty()) {
+      continue;
+    }
+    std::vector<std::string> columns;
+    std::string current;
+    bool in_quotes = false;
+    for (size_t i = 0; i < cleaned.size(); ++i) {
+      char ch = cleaned[i];
+      if (ch == '"') {
+        if (in_quotes && i + 1 < cleaned.size() && cleaned[i + 1] == '"') {
+          current.push_back('"');
+          ++i;
+          continue;
+        }
+        in_quotes = !in_quotes;
+        continue;
+      }
+      if (ch == ',' && !in_quotes) {
+        columns.push_back(Trim(current));
+        current.clear();
+        continue;
+      }
+      current.push_back(ch);
+    }
+    columns.push_back(Trim(current));
+    if (columns.size() < 2) {
+      continue;
+    }
+    std::string addr_token = columns[0];
+    std::string label = columns[1];
+    if (!addr_token.empty() && addr_token.front() == '"') {
+      addr_token.erase(addr_token.begin());
+    }
+    if (!addr_token.empty() && addr_token.back() == '"') {
+      addr_token.pop_back();
+    }
+    if (!label.empty() && label.front() == '"') {
+      label.erase(label.begin());
+    }
+    if (!label.empty() && label.back() == '"') {
+      label.pop_back();
+    }
+    if (addr_token == "address" || addr_token == "Address") {
+      continue;
+    }
+    if (!addr_token.empty() && addr_token.front() == '$') {
+      addr_token.erase(addr_token.begin());
+    }
+    auto colon = addr_token.find(':');
+    if (colon == std::string::npos) {
+      continue;
+    }
+    auto bank = ParseHex(addr_token.substr(0, colon));
+    auto addr = ParseHex(addr_token.substr(colon + 1));
+    if (!bank.has_value() || !addr.has_value()) {
+      continue;
+    }
+    uint32_t address = ((*bank & 0xFF) << 16) | (*addr & 0xFFFF);
+    AddLabel(index, address, label);
+  }
+  return true;
+}
+
 bool LoadSymbols(const fs::path& path, LabelIndex* index) {
   if (path.empty()) {
     return true;
   }
   auto ext = path.extension().string();
   std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+  if (ext == ".csv") {
+    return LoadLabelsCsv(path, index);
+  }
   if (ext == ".mlb") {
     return LoadSymbolsMlb(path, index);
   }
@@ -484,6 +565,14 @@ bool ParseArgs(int argc, const char* argv[], Options* options) {
       options->symbols_path = argv[++i];
       continue;
     }
+    if (arg == "--labels" && i + 1 < argc) {
+      options->labels_path = argv[++i];
+      continue;
+    }
+    if (arg.rfind("--labels=", 0) == 0) {
+      options->labels_path = arg.substr(std::string("--labels=").size());
+      continue;
+    }
     if (arg == "--hooks") {
       if (i + 1 < argc && argv[i + 1][0] != '-') {
         options->hooks_path = argv[++i];
@@ -575,6 +664,11 @@ int main(int argc, const char* argv[]) {
   }
 
   LabelIndex labels;
+  if (!options.labels_path.empty() &&
+      !LoadSymbols(options.labels_path, &labels)) {
+    std::cerr << "Failed to load labels: " << options.labels_path << "\n";
+    return 1;
+  }
   if (!options.symbols_path.empty() &&
       !LoadSymbols(options.symbols_path, &labels)) {
     std::cerr << "Failed to load symbols: " << options.symbols_path << "\n";

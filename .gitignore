@@ -77,3 +77,4 @@ node_modules/
 
 # Build directories
 build-*/
+extensions/vscode-z3dk/dist/

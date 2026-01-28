@@ -102,7 +102,51 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
       range.start = static_cast<uint32_t>(block.snes_offset);
       range.end = static_cast<uint32_t>(block.snes_offset + block.num_bytes);
       ranges.push_back(range);
+      
+      // Hook Validation
+      if (options.warn_unauthorized_hook) {
+        // Simple heuristic: if it's in a sensitive region (e.g. Bank 0-3 non-freespace)
+        // For OoS, sensitive regions are usually fixed code banks.
+        // Let's check against known_hooks.
+        bool is_known = false;
+        // Address is SNES
+        uint32_t addr = range.start;
+        // Basic check for freespace (e.g. $F00000+ or ends of banks $7000-$7FFF in LoROM)
+        bool is_freespace = (addr >= 0xF00000) || ((addr & 0xFFFF) >= 0x8000 && (addr & 0x7FFF) >= 0x7000);
+        
+        if (!is_freespace) {
+          for (const auto& hook : options.known_hooks) {
+            if (addr >= hook.address && addr < hook.address + std::max(1, hook.size)) {
+              is_known = true;
+              break;
+            }
+          }
+          if (!is_known) {
+            char buf[128];
+            std::snprintf(buf, sizeof(buf), "Unauthorized hook at $%06X (not in hooks.json)", addr);
+            AddDiagnostic(&out, DiagnosticSeverity::kWarning, buf, addr, sources);
+          }
+        }
+      }
     }
+    
+    // Bank Capacity
+    if (options.warn_bank_full_percent > 0) {
+      std::unordered_map<uint8_t, size_t> bank_usage;
+      for (const auto& block : result.written_blocks) {
+        uint8_t bank = (block.snes_offset >> 16) & 0xFF;
+        bank_usage[bank] += block.num_bytes;
+      }
+      for (const auto& pair : bank_usage) {
+        double percent = (pair.second / 32768.0) * 100.0; // Assuming LoROM 32KB banks
+        if (percent > options.warn_bank_full_percent) {
+          char buf[128];
+          std::snprintf(buf, sizeof(buf), "Bank $%02X is %d%% full (%zu bytes used)", pair.first, (int)percent, pair.second);
+          AddDiagnostic(&out, DiagnosticSeverity::kWarning, buf, (pair.first << 16) | 0x8000, sources);
+        }
+      }
+    }
+
     std::sort(ranges.begin(), ranges.end(),
               [](const Range& a, const Range& b) {
                 if (a.start != b.start) {
@@ -144,6 +188,21 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
 
     while (pc < end) {
       uint8_t opcode = result.rom_data[pc];
+      
+      // Apply state overrides
+      for (const auto& override : options.state_overrides) {
+        if (override.address == snes) {
+          if (override.m_width > 0) {
+            widths.m_width = override.m_width;
+            widths.m_known = true;
+          }
+          if (override.x_width > 0) {
+            widths.x_width = override.x_width;
+            widths.x_known = true;
+          }
+        }
+      }
+
       const OpcodeInfo& info = GetOpcodeInfo(opcode);
 
       int m_width = widths.m_known ? widths.m_width
@@ -223,6 +282,20 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
 
       pc += 1 + operand_size;
       snes += static_cast<uint32_t>(1 + operand_size);
+    }
+  }
+
+  // Unused Symbol Detection
+  if (options.warn_unused_symbols) {
+    for (const auto& label : result.labels) {
+      if (!label.used) {
+        // Skip labels that start with _ or contain . (internal/sublabels)
+        if (!label.name.empty() && label.name[0] != '_' && label.name.find('.') == std::string::npos) {
+          std::string message = "Unused label: " + label.name;
+          AddDiagnostic(&out, DiagnosticSeverity::kWarning, message, label.address,
+                        sources);
+        }
+      }
     }
   }
 

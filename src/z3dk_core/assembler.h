@@ -25,6 +25,7 @@ struct Diagnostic {
 struct Label {
   std::string name;
   uint32_t address = 0;
+  bool used = false;
 };
 
 struct Define {

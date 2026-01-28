@@ -14,11 +14,17 @@
     "onLanguage:asar",
     "onView:z3dk.commands",
     "onView:z3dk.dashboard",
+    "onView:z3dk.labels",
+    "onView:z3dk.romMap",
+    "onCommand:z3dk.openRomMap",
     "onCommand:z3dk.runTests",
     "onCommand:z3dk.build",
     "onCommand:z3dk.exportSymbols",
     "onCommand:z3dk.restartServer",
     "onCommand:z3dk.openWorkspace",
+    "onCommand:z3dk.selectProject",
+    "onCommand:z3dk.openMainAsm",
+    "onCommand:z3dk.selectRom",
     "onCommand:z3dk.openReadme",
     "onCommand:z3dk.openModelCatalog",
     "onCommand:z3dk.openModelPortfolio",
@@ -30,22 +36,31 @@
     "onCommand:z3dk.openYazeRepo",
     "onCommand:z3dk.openMesenRepo",
     "onCommand:z3dk.openDashboard",
-    "onCommand:z3dk.toggleAnnotations",
     "onCommand:z3dk.launchMesen",
     "onCommand:z3dk.launchYaze",
     "onCommand:z3dk.openRomFolder",
     "onCommand:z3dk.openUsdasmRoot",
     "onCommand:z3dk.findUsdasmLabel",
     "onCommand:z3dk.exportDisassembly",
+    "onCommand:z3dk.openDisassemblyOutput",
+    "onCommand:z3dk.openDisassemblyFile",
+    "onCommand:z3dk.openLatestDisassemblyFile",
+    "onCommand:z3dk.openYazeLog",
+    "onCommand:z3dk.findLabel",
+    "onCommand:z3dk.openLabelSearch",
+    "onCommand:z3dk.generateLabelIndex",
+    "onCommand:z3dk.lspStatusOn",
+    "onCommand:z3dk.lspStatusOff",
     "onCommand:z3dk.refresh",
-    "onCommand:z3dk.refreshDashboard"
+    "onCommand:z3dk.refreshDashboard",
+    "onLanguage:65816-assembly"
   ],
   "main": "extension.js",
   "contributes": {
     "languages": [
       {
         "id": "asar",
-        "aliases": ["Asar", "z3asm"],
+        "aliases": ["Asar", "z3asm", "65816-assembly"],
         "extensions": [".asm", ".inc", ".s", ".a65", ".zasm"],
         "configuration": "./language-configuration.json"
       }
@@ -67,6 +82,18 @@
       {
         "command": "z3dk.openWorkspace",
         "title": "Z3DK: Workspace"
+      },
+      {
+        "command": "z3dk.selectProject",
+        "title": "Z3DK: Select Project"
+      },
+      {
+        "command": "z3dk.openMainAsm",
+        "title": "Z3DK: Main ASM"
+      },
+      {
+        "command": "z3dk.selectRom",
+        "title": "Z3DK: Select ROM"
       },
       {
         "command": "z3dk.openReadme",
@@ -117,10 +144,6 @@
         "title": "Z3DK: Dashboard"
       },
       {
-        "command": "z3dk.toggleAnnotations",
-        "title": "Z3DK: Toggle Annotations"
-      },
-      {
         "command": "z3dk.openOracleRepo",
         "title": "Z3DK: Oracle Repo"
       },
@@ -149,12 +172,56 @@
         "title": "Z3DK: USDASM Root"
       },
       {
+        "command": "z3dk.openLabelSearch",
+        "title": "Z3DK: Label Search Panel"
+      },
+      {
+        "command": "z3dk.findLabel",
+        "title": "Z3DK: Label Search"
+      },
+      {
+        "command": "z3dk.generateLabelIndex",
+        "title": "Z3DK: Regenerate Label Index"
+      },
+      {
         "command": "z3dk.findUsdasmLabel",
         "title": "Z3DK: USDASM Search"
       },
       {
         "command": "z3dk.exportDisassembly",
         "title": "Z3DK: Hack Disasm"
+      },
+      {
+        "command": "z3dk.openDisassemblyOutput",
+        "title": "Z3DK: Disasm Output"
+      },
+      {
+        "command": "z3dk.openDisassemblyFile",
+        "title": "Z3DK: Disasm File"
+      },
+      {
+        "command": "z3dk.openLatestDisassemblyFile",
+        "title": "Z3DK: Latest Disasm"
+      },
+      {
+        "command": "z3dk.openYazeLog",
+        "title": "Z3DK: Yaze Log"
+      },
+      {
+        "command": "z3dk.lspStatusOn",
+        "title": "Z3DK LSP: on"
+      },
+      {
+        "command": "z3dk.lspStatusOff",
+        "title": "Z3DK LSP: off"
+      },
+      {
+        "command": "z3dk.initProject",
+        "title": "Z3DK: New Zelda Project"
+      },
+      {
+        "command": "z3dk.openRomMap",
+        "title": "Z3DK: Open ROM Map"
       },
       {
         "command": "z3dk.refresh",
@@ -179,6 +246,16 @@
         {
           "id": "z3dk.dashboard",
           "name": "Dashboard",
+          "type": "webview"
+        },
+        {
+          "id": "z3dk.labels",
+          "name": "Labels",
+          "type": "webview"
+        },
+        {
+          "id": "z3dk.romMap",
+          "name": "ROM Map",
           "type": "webview"
         },
         {
@@ -211,6 +288,10 @@
         },
         {
           "command": "z3dk.openDashboard",
+          "group": "1_general"
+        },
+        {
+          "command": "z3dk.openLabelSearch",
           "group": "1_general"
         },
         {
@@ -250,11 +331,31 @@
           "group": "4_disasm"
         },
         {
+          "command": "z3dk.openLatestDisassemblyFile",
+          "group": "4_disasm"
+        },
+        {
+          "command": "z3dk.openDisassemblyOutput",
+          "group": "4_disasm"
+        },
+        {
+          "command": "z3dk.openDisassemblyFile",
+          "group": "4_disasm"
+        },
+        {
           "command": "z3dk.findUsdasmLabel",
           "group": "4_disasm"
         },
         {
+          "command": "z3dk.findLabel",
+          "group": "4_disasm"
+        },
+        {
           "command": "z3dk.openUsdasmRoot",
+          "group": "4_disasm"
+        },
+        {
+          "command": "z3dk.generateLabelIndex",
           "group": "4_disasm"
         },
         {
@@ -289,33 +390,55 @@
       "editor/context": [
         {
           "command": "z3dk.openDashboard",
-          "when": "editorLangId == asar",
+          "when": "z3dk.isAsmLanguage",
           "group": "z3dk@1"
         },
         {
           "command": "z3dk.exportSymbols",
-          "when": "editorLangId == asar && z3dk.lspActive",
+          "when": "z3dk.isAsmLanguage && z3dk.lspActive",
+          "group": "z3dk@2"
+        },
+        {
+          "command": "z3dk.findLabel",
+          "when": "z3dk.isAsmLanguage && z3dk.lspActive",
           "group": "z3dk@2"
         },
         {
           "command": "z3dk.findUsdasmLabel",
-          "when": "editorLangId == asar && z3dk.lspActive",
+          "when": "z3dk.isAsmLanguage && z3dk.lspActive",
           "group": "z3dk@2"
         },
         {
           "command": "z3dk.exportDisassembly",
-          "when": "editorLangId == asar && z3dk.lspActive",
+          "when": "z3dk.isAsmLanguage && z3dk.lspActive",
+          "group": "z3dk@2"
+        },
+        {
+          "command": "z3dk.openDisassemblyOutput",
+          "when": "z3dk.isAsmLanguage",
+          "group": "z3dk@2"
+        },
+        {
+          "command": "z3dk.openLatestDisassemblyFile",
+          "when": "z3dk.isAsmLanguage",
           "group": "z3dk@2"
         },
         {
           "command": "z3dk.restartServer",
-          "when": "editorLangId == asar",
+          "when": "z3dk.isAsmLanguage",
           "group": "z3dk@3"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "z3dk.lspStatusOn",
+          "when": "z3dk.isAsmLanguage && z3dk.lspActive",
+          "group": "navigation@1"
         },
         {
-          "command": "z3dk.toggleAnnotations",
-          "when": "editorLangId == asar",
-          "group": "z3dk@3"
+          "command": "z3dk.lspStatusOff",
+          "when": "z3dk.isAsmLanguage && !z3dk.lspActive",
+          "group": "navigation@1"
         }
       ],
       "view/title": [
@@ -401,30 +524,61 @@
           "default": "**/*.asm,**/*.inc,**/*.s,**/*.a65",
           "description": "Glob for searching USDASM labels."
         },
+        "z3dk.labelIndexPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the combined label index CSV (label_index_all.csv). Leave empty to auto-detect."
+        },
+        "z3dk.labelMapPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to merged label map CSV (labels_merged.csv). Leave empty to auto-detect."
+        },
+        "z3dk.labelIndexCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Command to regenerate label indexes (supports ${workspaceFolder} / ${workspaceRoot} / ${z3dk})."
+        },
+        "z3dk.autoGenerateLabelIndex": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-regenerate label indexes after build/disasm/symbol export."
+        },
+        "z3dk.labelIndexDebounceMs": {
+          "type": "number",
+          "default": 8000,
+          "description": "Debounce delay before regenerating label indexes."
+        },
+        "z3dk.labelSearchLimit": {
+          "type": "number",
+          "default": 200,
+          "description": "Maximum number of label search results to show."
+        },
         "z3dk.disasmCommand": {
           "type": "string",
           "default": "",
-          "description": "Command to export a USDASM-style disassembly (supports ${rom}, ${symbols}, ${output}, ${usdasm})."
+          "description": "Command to export a USDASM-style disassembly (supports ${rom}, ${symbols}, ${output}, ${usdasm}, ${labels})."
         },
         "z3dk.disasmOutputPath": {
           "type": "string",
           "default": "",
           "description": "Output path for exported disassembly artifacts."
         },
-        "z3dk.enableCodeLens": {
+        "z3dk.autoOpenDisassemblyOutput": {
           "type": "boolean",
-          "default": true,
-          "description": "Show Z3DK CodeLens actions in Asar files when LSP is active."
+          "default": false,
+          "description": "Auto-open disassembly output after running Hack Disasm."
         },
-        "z3dk.editorAnnotations": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show inline label/org tags in Asar files when LSP is active."
+        "z3dk.languageIds": {
+          "type": "array",
+          "default": ["asar", "asm", "65816", "65c816", "wla-65816", "snes-asm", "snesasm", "super-nes-asm"],
+          "items": {"type": "string"},
+          "description": "Language ids that should activate the Z3DK LSP."
         },
         "z3dk.autoStart": {
           "type": "boolean",
           "default": true,
-          "description": "Auto-start z3lsp when opening Asar files."
+          "description": "Auto-start z3lsp when opening Asar/65816 files."
         },
         "z3dk.serverPath": {
           "type": "string",
@@ -452,10 +606,25 @@
           "default": "yaze",
           "description": "Path to the yaze executable used for symbol export."
         },
+        "z3dk.yazeQuiet": {
+          "type": "boolean",
+          "default": true,
+          "description": "Redirect yaze stdout/stderr to a log file to reduce terminal spam."
+        },
+        "z3dk.yazeLogPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to write yaze logs (defaults to ~/.cache/z3dk/yaze.log)."
+        },
         "z3dk.romPath": {
           "type": "string",
           "default": "",
           "description": "ROM path to use for symbol export (required for export command)."
+        },
+        "z3dk.projectRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Override Z3DK project root (folder containing z3dk.toml)."
         },
         "z3dk.symbolFormat": {
           "type": "string",

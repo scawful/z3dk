@@ -87,11 +87,10 @@ macro(set_asar_shared_properties target msvc_lib_type_param enable_sanitizer)
 		target_compile_definitions(${target} PRIVATE "linux")
 		target_compile_definitions(${target} PRIVATE "stricmp=strcasecmp")
 
-		if(ASAR_USE_THREADS)
-			set(THREADS_PREFER_PTHREAD_FLAG ON)
-			find_package(Threads REQUIRED)
-			target_link_libraries(${target} PRIVATE Threads::Threads)
-		endif()
+		set(THREADS_PREFER_PTHREAD_FLAG ON)
+		set(CMAKE_THREAD_LIBS_INIT "-lpthread")
+		find_package(Threads REQUIRED)
+		target_link_libraries(${target} PRIVATE Threads::Threads)
 	endif()
 
 
@@ -339,14 +338,15 @@ endif()
 
 # Protobuf handling
 # find_package(OpenSSL CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
-# find_package(Protobuf)
-include_directories(${Protobuf_INCLUDE_DIRS})
+find_package(Protobuf CONFIG REQUIRED)
 
 add_executable(zasar_server "${CMAKE_CURRENT_SOURCE_DIR}/zAsar_server.cc")
 target_link_libraries(zasar_server PRIVATE protobuf::libprotobuf gRPC::grpc++ libz3dk-static)
 
 add_library(zasar_proto OBJECT "${CMAKE_CURRENT_SOURCE_DIR}/proto/zAsar.proto")
+target_link_libraries(zasar_proto PUBLIC protobuf::libprotobuf gRPC::grpc++)
 target_link_libraries(zasar_server PRIVATE zasar_proto)
 
 set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")

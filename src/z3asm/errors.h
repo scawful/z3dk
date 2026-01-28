@@ -185,6 +185,16 @@
 	ERR(bad_addr_mode, "This addressing mode is not valid for this instruction.") \
 	ERR(bad_access_width, "This addressing mode can accept %s arguments, but the provided argument is %d-bit.") \
 	ERR(label_before_if, "Labels are not allowed before \"%s\" commands. Suggestion: move the label to a separate line.") \
+	ERR(hook_without_endhook, "hook without matching endhook.") \
+	ERR(nested_hook, "Can not nest hooks.") \
+	ERR(endhook_without_hook, "endhook can only be used in combination with hook.") \
+	ERR(hook_invalid_type, "Invalid hook type. Expected JSL or JML.") \
+	ERR(hook_too_many_args, "Too many args passed to hook.") \
+	ERR(hook_too_few_args, "Too few args passed to hook.") \
+	ERR(incgfx_too_few_args, "Too few args passed to incgfx.") \
+	ERR(incgfx_failed, "incgfx failed for file '%s': %s") \
+	ERR(incmsg_too_few_args, "Too few args passed to incmsg.") \
+	ERR(incmsg_failed, "incmsg failed: %s") \
 // this line intentionally left blank
 
 enum asar_error_id : int {

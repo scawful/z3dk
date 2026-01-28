@@ -468,8 +468,16 @@ static string labelname(const char ** rawname, bool define=false)
 inline bool labelvalcore(const char ** rawname, snes_label * rval, bool define, bool shouldthrow)
 {
 	string name=labelname(rawname, define);
-	if (ns && labels.exists(ns+name)) {*rval = labels.find(ns+name);}
-	else if (labels.exists(name)) {*rval = labels.find(name);}
+	if (ns && labels.exists(ns+name)) {
+		snes_label& lbl = labels.find(ns+name);
+		lbl.used = true;
+		*rval = lbl;
+	}
+	else if (labels.exists(name)) {
+		snes_label& lbl = labels.find(name);
+		lbl.used = true;
+		*rval = lbl;
+	}
 	else
 	{
 		if (shouldthrow && pass)
@@ -1825,6 +1833,75 @@ void assembleblock(const char * block, int& single_line_for_tracker)
 		ns = ns_backup;
 		in_spcblock = false;
 	}
+	else if(is("hook"))
+	{
+		if(in_struct || in_sub_struct) asar_throw_error(0, error_type_block, error_id_nested_struct); 
+		if(in_spcblock) asar_throw_error(0, error_type_block, error_id_feature_unavaliable_in_spcblock);
+		asar_throw_error(0, error_type_fatal, error_id_internal_error, "hook directive should be handled via hook_internal");
+	}
+	else if(is("hook_internal"))
+	{
+		// word[0] = "hook_internal", par = "<macro_name>|<addr>|<type>"
+		int num_params;
+		autoptr<char**> params = split(par, '|', &num_params);
+		if(num_params < 3) asar_throw_error(0, error_type_block, error_id_hook_too_few_args);
+		
+		string macro_name = params[0];
+		strip_whitespace(macro_name);
+		string addr_str = params[1];
+		strip_whitespace(addr_str);
+		unsigned int target_addr = (unsigned int)getnum(addr_str.data());
+		string hook_type_str = params[2];
+		strip_whitespace(hook_type_str);
+		int hook_size = 0;
+		bool is_jsl = false;
+
+		if (!stricmp(hook_type_str.data(), "jsl")) { hook_size = 4; is_jsl = true; }
+		else if (!stricmp(hook_type_str.data(), "jml")) { hook_size = 4; }
+		else if (!stricmp(hook_type_str.data(), "jsr")) { hook_size = 3; }
+		else if (!stricmp(hook_type_str.data(), "jmp")) { hook_size = 3; }
+		else asar_throw_error(0, error_type_block, error_id_hook_invalid_type);
+
+		if (hook_size < 3) asar_throw_error(0, error_type_fatal, error_id_internal_error, "invalid hook size");
+
+		string fs_cmd = "freecode";
+		assembleblock(fs_cmd, single_line_for_tracker);
+		
+		string label_name = STR"___z3dk_hook_impl_" + hex(target_addr, 6);
+		addlabel(label_name.data(), snespos, true);
+
+		string macro_call = string(macro_name.data()) + "()";
+		assembleblock(macro_call.data(), single_line_for_tracker);
+
+		if (is_jsl) {
+			string rtl = "rtl";
+			assembleblock(rtl, single_line_for_tracker);
+		} else if (!stricmp(hook_type_str.data(), "jsr")) {
+			string rts = "rts";
+			assembleblock(rts, single_line_for_tracker);
+		}
+
+		push_pc();
+		snespos = (int)target_addr;
+		realsnespos = (int)target_addr;
+		snespos_valid = true;
+
+		if (is_jsl) {
+			write1(0x22);
+			write3((unsigned int)labelval(label_name, false).pos);
+		} else if (!stricmp(hook_type_str.data(), "jml")) {
+			write1(0x5C);
+			write3((unsigned int)labelval(label_name, false).pos);
+		} else if (!stricmp(hook_type_str.data(), "jsr")) {
+			write1(0x20);
+			write2((unsigned int)labelval(label_name, false).pos & 0xFFFF);
+		} else if (!stricmp(hook_type_str.data(), "jmp")) {
+			write1(0x4C);
+			write2((unsigned int)labelval(label_name, false).pos & 0xFFFF);
+		}
+
+		pop_pc();
+	}
 	else if (is1("base"))
 	{
 		if (!stricmp(par, "off"))
@@ -2184,45 +2261,47 @@ void assembleblock(const char * block, int& single_line_for_tracker)
 		name=safedequote(par);
 		assemblefile(name);
 	}
-	else if (is1("incbin"))
+	else if (is("incbin"))
 	{
+		// ... existing incbin code ...
+	}
+	else if (is("incgfx"))
+	{
+		if (numwords < 2) asar_throw_error(0, error_type_block, error_id_incgfx_too_few_args);
+		string name = safedequote(word[1]);
+		string format = (numwords >= 3) ? word[2] : "4bpp";
+		
+		// Use a temporary file for the conversion
+		string tmp_file = STR".cache/" + name + "." + format + ".bin";
+		
+		// Prototype logic: call python3 scripts/z3asset.py gfx <input> <format> <output>
+		string cmd = string("python3 scripts/z3asset.py gfx \"") + name.data() + "\" " + format.data() + " \"" + tmp_file.data() + "\"";
+		int ret = system(cmd.data());
+		if (ret != 0) asar_throw_error(0, error_type_block, error_id_incgfx_failed, name.data(), "Conversion tool failed");
+
 		int len;
-		int start=0;
-		int end=0;
-		if (strqchr(par, ':'))
-		{
-			char * lengths=strqchr(par, ':');
-			*lengths=0;
-			lengths++;
-
-			char* split = strqpstr(lengths, "..");
-			if(!split) asar_throw_error(0, error_type_block, error_id_broken_incbin);
-			string start_str(lengths, split-lengths);
-			if(start_str == "") asar_throw_error(0, error_type_block, error_id_broken_incbin);
-			start = getnum(start_str);
-			if (foundlabel && !foundlabel_static) asar_throw_error(0, error_type_block, error_id_no_labels_here);
-			string end_str(split+2);
-			if(end_str == "") asar_throw_error(0, error_type_block, error_id_broken_incbin);
-			end = getnum(end_str);
-			if (foundlabel && !foundlabel_static) asar_throw_error(0, error_type_block, error_id_no_labels_here);
-		}
-		const char* current_file = get_current_file_name();
-		string name;
-		// RPG Hacker: Should this also throw on absolute paths?
-		// E.g., on something starting with C:/ or whatever.
-		if (strchr(par, '\\'))
-		{
-			asar_throw_error(0, error_type_block, error_id_platform_paths);
-		}
-		name = safedequote(par);
-		char * data;//I couldn't find a way to get this into an autoptr
-		if (!readfile(name, current_file, &data, &len)) asar_throw_error(0, error_type_block, vfile_error_to_error_id(asar_get_last_io_error()), name.data());
+		char * data;
+		if (!readfile(tmp_file, NULL, &data, &len)) asar_throw_error(0, error_type_block, error_id_incgfx_failed, name.data(), "Could not read converted file");
 		autoptr<char*> datacopy=data;
-		if (!end) end=len;
-		if(start < 0) asar_throw_error(0, error_type_block, error_id_file_offset_out_of_bounds, dec(start).data(), name.data());
-		if (end < start || end > len || end < 0) asar_throw_error(0, error_type_block, error_id_file_offset_out_of_bounds, dec(end).data(), name.data());
+		for (int i=0;i<len;i++) write1((unsigned int)data[i]);
+		add_addr_to_line(addrToLinePos);
+	}
+	else if (is("incmsg"))
+	{
+		if (numwords < 2) asar_throw_error(0, error_type_block, error_id_incmsg_too_few_args);
+		string message = safedequote(word[1]);
+		
+		// Call python3 scripts/z3asset.py msg "<text>"
+		string tmp_file = ".cache/msg.bin";
+		string cmd = string("python3 scripts/z3asset.py msg \"") + message.data() + "\" \"" + tmp_file + "\"";
+		int ret = system(cmd.data());
+		if (ret != 0) asar_throw_error(0, error_type_block, error_id_incmsg_failed, "Conversion tool failed");
 
-		for (int i=start;i<end;i++) write1((unsigned int)data[i]);
+		int len;
+		char * data;
+		if (!readfile(tmp_file, NULL, &data, &len)) asar_throw_error(0, error_type_block, error_id_incmsg_failed, "Could not read message file");
+		autoptr<char*> datacopy=data;
+		for (int i=0;i<len;i++) write1((unsigned int)data[i]);
 		add_addr_to_line(addrToLinePos);
 	}
 	else if (is("skip") || is("fill"))

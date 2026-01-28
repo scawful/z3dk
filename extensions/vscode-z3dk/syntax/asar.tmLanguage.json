@@ -38,7 +38,7 @@
       "patterns": [
         {
           "name": "keyword.directive.asar",
-          "match": "(?i)\\b(?:arch|autoclean|base|banksize|check|cleartable|db|dw|dl|dd|define|undef|incbin|incsrc|include|incdir|includefrom|org|pushpc|pullpc|pushbase|pullbase|pushns|pullns|namespace|endnamespace|macro|endmacro|function|endfunction|if|elseif|else|endif|while|endwhile|for|endfor|table|pulltable|freedata|freecode|freespace|prot|pad|padbyte|padword|fill|fillbyte|fillword|align|skip|startpos|spcblock|endspcblock|print|warn|warning|error|assert|mapper|lorom|hirom|exlorom|exhirom|sa1rom|sfxrom|norom|asar|priority|title|incbin|incsrc)\\b"
+          "match": "(?i)\\b(?:arch|autoclean|base|banksize|check|cleartable|db|dw|dl|dd|define|undef|incbin|incgfx|incmsg|incsrc|include|incdir|includefrom|org|pushpc|pullpc|pushbase|pullbase|pushns|pullns|namespace|endnamespace|macro|endmacro|hook|endhook|function|endfunction|if|elseif|else|endif|while|endwhile|for|endfor|table|pulltable|freedata|freecode|freespace|prot|pad|padbyte|padword|fill|fillbyte|fillword|align|skip|startpos|spcblock|endspcblock|print|warn|warning|error|assert|mapper|lorom|hirom|exlorom|exhirom|sa1rom|sfxrom|norom|asar|priority|title|incbin|incsrc)\\b"
         }
       ]
     },

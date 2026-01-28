@@ -12,6 +12,13 @@ elif [[ "$(uname)" == "Darwin" ]]; then
   CMAKE_ARGS+=("-DASAR_GEN_CS_TEST=OFF")
 fi
 
+# Pre-flight check
+if [[ ! -f "${ROOT}/dummy_rom.sfc" ]]; then
+    echo "Error: dummy_rom.sfc not found in ${ROOT}"
+    echo "Run 'git restore dummy_rom.sfc' or recreate it."
+    exit 1
+fi
+
 mkdir -p "${BUILD_DIR}"
 cmake -S "${ROOT}" -B "${BUILD_DIR}" "${CMAKE_ARGS[@]}"
 cmake --build "${BUILD_DIR}" --target run-tests

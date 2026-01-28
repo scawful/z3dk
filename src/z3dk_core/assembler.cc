@@ -183,6 +183,7 @@ AssembleResult Assembler::Assemble(const AssembleOptions& options) const {
     Label label;
     label.name = labels[i].name ? labels[i].name : "";
     label.address = static_cast<uint32_t>(labels[i].location);
+    label.used = labels[i].used;
     result.labels.push_back(std::move(label));
   }
 

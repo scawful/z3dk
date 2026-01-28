@@ -22,11 +22,13 @@ struct snes_label {
 	int id;
 	int freespace_id;
 	bool is_static;
+	bool used;
 
 	snes_label()
 	{
 		pos = 0;
 		is_static = false;
+		used = false;
 		freespace_id = 0;
 		id = label_counter++;
 	}

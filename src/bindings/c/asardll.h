@@ -30,6 +30,7 @@ struct errordata {
 struct labeldata {
 	const char * name;
 	int location;
+	bool used;
 };
 
 struct definedata {

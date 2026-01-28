@@ -13,9 +13,24 @@
 #include "z3dk_core/emit.h"
 #include "z3dk_core/lint.h"
 
+#ifdef _WIN32
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
+#else
+#include <unistd.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace {
+
+const char* kColorReset = "\033[0m";
+const char* kColorRed = "\033[1;31m";
+const char* kColorYellow = "\033[1;33m";
+const char* kColorCyan = "\033[1;36m";
+const char* kColorGreen = "\033[1;32m";
+const char* kColorBold = "\033[1m";
 
 struct EmitTarget {
   enum class Kind {
@@ -45,11 +60,14 @@ struct CliOptions {
   bool lint_warn_org_collision = true;
   bool show_help = false;
   bool show_version = false;
+  bool is_init = false;
+  std::string project_name;
 };
 
 void PrintUsage(const char* name) {
   std::cout
-      << "Usage: " << name << " [options] <asm_file> [rom_file]\n\n"
+      << "Usage: " << name << " [options] <asm_file> [rom_file]\n"
+      << "       " << name << " init [project_name]\n\n"
       << "Options:\n"
       << "  --config=<path>          Use z3dk.toml config file\n"
       << "  -I<path>, --include <p>  Add include search path\n"
@@ -174,6 +192,13 @@ bool ParseArgs(int argc, const char* argv[], CliOptions* options,
                std::string* error) {
   for (int i = 1; i < argc; ++i) {
     std::string arg(argv[i]);
+    if (arg == "init") {
+      options->is_init = true;
+      if (i + 1 < argc && argv[i+1][0] != '-') {
+        options->project_name = argv[++i];
+      }
+      continue;
+    }
     if (arg == "--help" || arg == "-h") {
       options->show_help = true;
       return true;
@@ -379,6 +404,71 @@ std::string ResolveConfigPath(const std::string& path, const fs::path& base_dir)
   return resolved.lexically_normal().string();
 }
 
+bool DoInit(const CliOptions& options, std::string* error) {
+  fs::path root = fs::current_path();
+  if (!options.project_name.empty()) {
+    root /= options.project_name;
+  }
+
+  if (fs::exists(root / "z3dk.toml")) {
+    if (error) *error = "Project already initialized (z3dk.toml exists)";
+    return false;
+  }
+
+  if (!options.project_name.empty()) {
+    if (!fs::exists(root)) {
+      if (!fs::create_directories(root)) {
+        if (error) *error = "Failed to create project directory: " + root.string();
+        return false;
+      }
+    }
+  }
+
+  // Create directories
+  fs::create_directories(root / "src");
+  fs::create_directories(root / "include");
+  fs::create_directories(root / "assets");
+  fs::create_directories(root / "build");
+
+  // Create z3dk.toml
+  std::ofstream toml(root / "z3dk.toml");
+  toml << "preset = \"alttp\"\n"
+       << "mapper = \"lorom\"\n"
+       << "rom_size = 0x200000\n"
+       << "include_paths = [\"src\", \"include\"]\n"
+       << "symbols = \"wla\"\n"
+       << "warn_unused_symbols = true\n"
+       << "emit = [\"diagnostics.json\", \"symbols.mlb\", \"hooks.json\"]\n";
+  toml.close();
+
+  // Create main.asm
+  std::ofstream main_asm(root / "src" / "main.asm");
+  main_asm << "; Z3DK Project: " << (options.project_name.empty() ? "MyHack" : options.project_name) << "\n\n"
+           << "incsrc \"alttp/all.asm\"\n\n"
+           << "; Hook into Reset vector\n"
+           << "HOOK $008000, JML\n"
+           << "    ; Your custom initialization code here\n"
+           << "    JML !Reset ; Call original reset\n"
+           << "ENDHOOK\n\n"
+           << "org $F00000 ; Use a high bank for new code\n"
+           << "Main:\n"
+           << "    RTS\n";
+  main_asm.close();
+
+  // Create .gitignore
+  std::ofstream gitignore(root / ".gitignore");
+  gitignore << "build/\n"
+            << "*.sfc\n"
+            << "*.smc\n"
+            << "*.sym\n"
+            << "diagnostics.json\n"
+            << "hooks.json\n";
+  gitignore.close();
+
+  std::cout << "Project initialized in " << root.string() << "\n";
+  return true;
+}
+
 }  // namespace
 
 int main(int argc, const char* argv[]) {
@@ -409,6 +499,14 @@ int main(int argc, const char* argv[]) {
 
     if (options.show_version) {
       std::cout << "z3asm (Z3DK)\n";
+      return 0;
+    }
+
+    if (options.is_init) {
+      if (!DoInit(options, &error)) {
+        std::cerr << error << "\n";
+        return 1;
+      }
       return 0;
     }
   }
@@ -448,6 +546,16 @@ int main(int argc, const char* argv[]) {
     if (!config_error.empty()) {
       std::cerr << config_error << "\n";
       return 1;
+    }
+
+    // Apply presets
+    if (config.preset.has_value() && *config.preset == "alttp") {
+      if (!config.mapper.has_value()) {
+        config.mapper = "lorom";
+      }
+      // Add stdlib defines/includes if not explicitly overridden
+      // The actual stdlib path depends on where z3dk is installed.
+      // For now, we assume it's relative to the binary or in a known location.
     }
   }
 
@@ -546,19 +654,44 @@ int main(int argc, const char* argv[]) {
   z3dk::Assembler assembler;
   z3dk::AssembleResult result = assembler.Assemble(assemble_options);
 
+  bool use_color = isatty(fileno(stderr));
+  int total_errors = 0;
+  int total_warnings = 0;
+
   for (const auto& diag : result.diagnostics) {
+    if (diag.severity == z3dk::DiagnosticSeverity::kError) {
+      total_errors++;
+    } else {
+      total_warnings++;
+    }
+
     if (!diag.raw.empty()) {
       std::cerr << diag.raw << "\n";
       continue;
     }
-    const char* level = diag.severity == z3dk::DiagnosticSeverity::kError
-                            ? "error"
-                            : "warning";
-    std::cerr << diag.filename;
-    if (diag.line > 0) {
-      std::cerr << ":" << diag.line;
+
+    if (use_color) {
+      std::cerr << kColorBold << diag.filename << kColorReset;
+      if (diag.line > 0) {
+        std::cerr << ":" << kColorCyan << diag.line << kColorReset;
+      }
+      std::cerr << ": ";
+      if (diag.severity == z3dk::DiagnosticSeverity::kError) {
+        std::cerr << kColorRed << "error" << kColorReset;
+      } else {
+        std::cerr << kColorYellow << "warning" << kColorReset;
+      }
+      std::cerr << ": " << diag.message << "\n";
+    } else {
+      const char* level = diag.severity == z3dk::DiagnosticSeverity::kError
+                              ? "error"
+                              : "warning";
+      std::cerr << diag.filename;
+      if (diag.line > 0) {
+        std::cerr << ":" << diag.line;
+      }
+      std::cerr << ": " << level << ": " << diag.message << "\n";
     }
-    std::cerr << ": " << level << ": " << diag.message << "\n";
   }
 
   for (const auto& print : result.prints) {
@@ -629,6 +762,9 @@ int main(int argc, const char* argv[]) {
           lint_options.warn_branch_outside_bank =
               options.lint_warn_branch_outside_bank;
           lint_options.warn_org_collision = options.lint_warn_org_collision;
+          if (config.warn_unused_symbols.has_value()) {
+            lint_options.warn_unused_symbols = *config.warn_unused_symbols;
+          }
           lint_result = z3dk::RunLint(result, lint_options);
         }
         bool lint_success = lint_result->success() && result.success;
@@ -649,6 +785,23 @@ int main(int argc, const char* argv[]) {
   if (interactive_mode) {
     std::cout << "Assembling completed without problems.\n";
   }
+
+  // CLI Summary
+  bool out_tty = isatty(fileno(stdout));
+  if (out_tty) {
+    std::cout << "\n" << (result.success ? kColorGreen : kColorRed) << "Result: " 
+              << (result.success ? "SUCCESS" : "FAILURE") << kColorReset << "\n";
+  } else {
+    std::cout << "\nResult: " << (result.success ? "SUCCESS" : "FAILURE") << "\n";
+  }
+
+  int total_bytes = 0;
+  for (const auto& block : result.written_blocks) {
+    total_bytes += block.num_bytes;
+  }
+
+  std::cout << "Summary: " << total_errors << " errors, " << total_warnings << " warnings, " 
+            << (out_tty ? kColorCyan : "") << total_bytes << (out_tty ? kColorReset : "") << " bytes written.\n";
 
   return result.success ? 0 : 1;
 }

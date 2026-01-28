@@ -15,13 +15,22 @@ cd ~/src/hobby/z3dk
 ./run_tests.sh
 ```
 
-### Building Tools
-
 ```bash
 mkdir -p build && cd build
 cmake ..
+
+# Build all tools
 make
+
+# Build specific tools
+make z3asm      # Assembler
+make z3disasm   # Disassembler
+make z3lsp      # Language Server
 ```
+
+### LSP Support
+
+To use the Language Server, ensure `build/bin/z3lsp` is built. It supports standard LSP features (Diagnostics, Go to Definition, Rename).
 
 ## Documentation
 

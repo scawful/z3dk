@@ -796,6 +796,9 @@ bool file_included_once(const char* file)
 autoarray<string> macro_defs;
 int in_macro_def=0;
 
+autoarray<string> hook_defs;
+int in_hook_def=0;
+
 void assemblefile(const char * filename)
 {
 	incsrcdepth++;
@@ -914,6 +917,12 @@ void assemblefile(const char * filename)
 		in_macro_def--;
 		macro_defs.remove(in_macro_def);
 	}
+	while (in_hook_def > 0)
+	{
+		asar_throw_error(0, error_type_null, error_id_hook_without_endhook);
+		in_hook_def--;
+		hook_defs.remove(in_hook_def);
+	}
 	if (numif!=startif)
 	{
 		numif=startif;
@@ -980,7 +989,86 @@ bool do_line_logic(const char* line, const char* filename, int lineno)
 				}
 			}
 		}
-		else if (in_macro_def > 0)
+		        else if (stribegin(current_line, "hook ") && numif==numtrue)
+		        {
+		            in_hook_def++;
+		            hook_defs.append(current_line);
+		            if (!pass)
+		            {
+		                if (in_hook_def == 1) 
+		                {
+		                    const char* p = current_line.data() + 5;
+		                    while (is_space(*p)) p++;
+		                    string addr_str;
+		                    while (*p && !is_space(*p) && *p != ',') addr_str += *p++;
+		                    unsigned int addr = (unsigned int)getnum(addr_str.data());
+		                    
+		                    char macro_name[64];
+		                    sprintf(macro_name, "___z3dk_hook_at_%06X", addr);
+		                    startmacro(string(macro_name) + "()");
+		                }
+		                else tomacro(current_line);
+		            }
+		        }
+		        else if (!stricmp(current_line, "endhook") && numif==numtrue)
+		        {
+		            if (in_hook_def == 0) asar_throw_error(0, error_type_line, error_id_endhook_without_hook);
+		            else
+		            {
+		                in_hook_def--;
+		                string hook_cmd = hook_defs[in_hook_def];
+		                hook_defs.remove(in_hook_def);
+		                if (!pass)
+		                {
+		                    if (in_hook_def == 0)
+		                    {
+		                        endmacro(true);
+		                        
+		                        const char* p = hook_cmd.data() + 5;
+		                        while (is_space(*p)) p++;
+		                        string addr_str;
+		                        while (*p && !is_space(*p) && *p != ',') addr_str += *p++;
+		                        unsigned int addr = (unsigned int)getnum(addr_str.data());
+		                        while (*p && (is_space(*p) || *p == ',')) p++;
+		                        string type_str;
+		                        while (*p && !is_space(*p)) type_str += *p++;
+		                        if (type_str == "") type_str = "jsl";
+		
+		                        char macro_name[64];
+		                        sprintf(macro_name, "___z3dk_hook_at_%06X", addr);
+		                        string stripped_args = string(macro_name) + "|" + hex(addr, 6).data() + "|" + type_str.data();
+		                        string final_cmd = string("hook_internal ") + stripped_args.data();
+		                        assembleblock(final_cmd.data(), single_line_for_tracker);
+		                    }
+		                    else tomacro(current_line);
+		                }
+		                else
+		                {
+		                    if (in_hook_def == 0)
+		                    {
+		                        const char* p = hook_cmd.data() + 5;
+		                        while (is_space(*p)) p++;
+		                        string addr_str;
+		                        while (*p && !is_space(*p) && *p != ',') addr_str += *p++;
+		                        unsigned int addr = (unsigned int)getnum(addr_str.data());
+		                        while (*p && (is_space(*p) || *p == ',')) p++;
+		                        string type_str;
+		                        while (*p && !is_space(*p)) type_str += *p++;
+		                        if (type_str == "") type_str = "jsl";
+		
+		                        char macro_name[64];
+		                        sprintf(macro_name, "___z3dk_hook_at_%06X", addr);
+		                        string stripped_args = string(macro_name) + "|" + hex(addr, 6).data() + "|" + type_str.data();
+		                        string final_cmd = string("hook_internal ") + stripped_args.data();
+		                        assembleblock(final_cmd.data(), single_line_for_tracker);
+		                    }
+		                }
+		            }
+		        }		else if (in_macro_def > 0)
+		{
+			if (!pass) tomacro(current_line);
+		}
+		else if (in_hook_def > 0)
 		{
 			if (!pass) tomacro(current_line);
 		}

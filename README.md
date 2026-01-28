@@ -16,6 +16,8 @@ Create a `z3dk.toml` next to your ASM to define includes/defines:
 include_paths = ["./", "src", "include"]
 defines = ["DEBUG=1", "ENABLE_FEATURE"]
 rom_size = 0x200000
+rom_path = "Roms/game.sfc"
+main = "main.asm"
 mapper = "lorom"  # available as !z3dk_mapper define
 symbols = "wla"   # none|wla|nocash
 symbols_path = "build/z3dk.sym"

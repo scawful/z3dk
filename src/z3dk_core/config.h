@@ -28,6 +28,8 @@ struct Config {
   std::optional<std::string> symbols_format;
   std::optional<std::string> symbols_path;
   std::vector<MemoryRange> prohibited_memory_ranges;
+  std::optional<bool> lsp_log_enabled;
+  std::optional<std::string> lsp_log_path;
   std::optional<bool> warn_unused_symbols;
   std::optional<bool> warn_branch_outside_bank;
   std::optional<bool> warn_unknown_width;

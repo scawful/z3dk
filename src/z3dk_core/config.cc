@@ -1,6 +1,7 @@
 #include "z3dk_core/config.h"
 
 #include <cctype>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -368,6 +369,10 @@ Config LoadConfigFile(const std::string& path, std::string* error) {
       config.symbols_format = ParseStringValue(value);
     } else if (key == "symbols_path") {
       config.symbols_path = ParseStringValue(value);
+    } else if (key == "lsp_log_enabled") {
+      config.lsp_log_enabled = ParseBool(value);
+    } else if (key == "lsp_log_path") {
+      config.lsp_log_path = ParseStringValue(value);
     } else if (key == "warn_unused_symbols") {
       config.warn_unused_symbols = ParseBool(value);
     } else if (key == "warn_branch_outside_bank") {

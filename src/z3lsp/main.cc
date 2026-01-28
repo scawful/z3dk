@@ -28,8 +28,11 @@ using json = nlohmann::json;
 
 namespace {
 
-void Log(const std::string& msg) {
-  static std::string log_path = []() {
+bool g_log_enabled = true;
+std::string g_log_path;
+
+std::string DefaultLogPath() {
+  static std::string path = []() {
     std::string dir;
     try {
       dir = fs::temp_directory_path().string();
@@ -50,7 +53,24 @@ void Log(const std::string& msg) {
     }
     return (fs::path(dir) / "z3lsp.log").string();
   }();
-  static std::ofstream log_file(log_path, std::ios::app);
+  return path;
+}
+
+void Log(const std::string& msg) {
+  if (!g_log_enabled) {
+    return;
+  }
+  const std::string& resolved_path = g_log_path.empty() ? DefaultLogPath() : g_log_path;
+  static std::string current_path;
+  static std::ofstream log_file;
+  if (resolved_path != current_path) {
+    if (log_file.is_open()) {
+      log_file.close();
+    }
+    log_file.clear();
+    log_file.open(resolved_path, std::ios::app);
+    current_path = resolved_path;
+  }
   if (log_file.is_open()) {
     log_file << msg << std::endl;
   }
@@ -285,6 +305,18 @@ fs::path ResolveConfigPath(const std::string& raw,
     return (workspace_root / candidate).lexically_normal();
   }
   return candidate.lexically_normal();
+}
+
+void UpdateLspLogConfig(const z3dk::Config& config,
+                        const fs::path& config_dir,
+                        const fs::path& workspace_root) {
+  if (config.lsp_log_enabled.has_value()) {
+    g_log_enabled = *config.lsp_log_enabled;
+  }
+  if (config.lsp_log_path.has_value()) {
+    fs::path resolved = ResolveConfigPath(*config.lsp_log_path, config_dir, workspace_root);
+    g_log_path = resolved.empty() ? std::string() : resolved.string();
+  }
 }
 
 bool AddMainCandidatesFromConfig(const z3dk::Config& config,
@@ -1762,6 +1794,9 @@ std::optional<WorkspaceState> BuildWorkspaceState(const json& params) {
     if (state.config_path.has_value()) {
       config_dir = state.config_path->parent_path();
     }
+    if (state.config.has_value()) {
+      UpdateLspLogConfig(*state.config, config_dir, state.root);
+    }
     if (state.config.has_value() && !state.config->include_paths.empty()) {
       include_paths = ResolveIncludePaths(*state.config, config_dir);
     }
@@ -1912,6 +1947,8 @@ DocumentState AnalyzeDocument(const DocumentState& doc,
       config_dir = local_config.parent_path();
     }
   }
+
+  UpdateLspLogConfig(config, config_dir, workspace.root);
 
   std::string root_uri = SelectRootUri(doc.uri, workspace);
   fs::path analysis_root_path = doc.path;

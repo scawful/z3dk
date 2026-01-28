@@ -45,6 +45,8 @@ warn_unused_symbols = true
 prohibited_memory_ranges = [
   "$7E0000-$7E01FF: SRAM scratchpad"
 ]
+lsp_log_enabled = true
+lsp_log_path = "z3lsp.log"
 
 # Define compilation targets
 emit = [
@@ -55,7 +57,8 @@ emit = [
 ```
 
 `prohibited_memory_ranges` accepts inclusive SNES address ranges. You can use `$` or `0x` prefixes and add an
-optional reason after `:` (used in diagnostics).
+optional reason after `:` (used in diagnostics). `lsp_log_enabled` toggles z3lsp JSON/error logging, and
+`lsp_log_path` overrides the default temp log location (relative paths resolve to the config directory).
 
 ### 3. Usage
 

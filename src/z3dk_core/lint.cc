@@ -87,13 +87,19 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
 
   SourceIndex sources = BuildSourceIndex(result.source_map);
 
-  if (IsOrgCollisionEnabled(options)) {
+  bool check_org_collision = IsOrgCollisionEnabled(options);
+  bool check_hooks = options.warn_unauthorized_hook;
+  bool check_bank_capacity = options.warn_bank_full_percent > 0;
+  if (check_org_collision || check_hooks || check_bank_capacity) {
     struct Range {
       uint32_t start = 0;
       uint32_t end = 0;
     };
     std::vector<Range> ranges;
-    ranges.reserve(result.written_blocks.size());
+    if (check_org_collision) {
+      ranges.reserve(result.written_blocks.size());
+    }
+    std::unordered_map<uint8_t, size_t> bank_usage;
     for (const auto& block : result.written_blocks) {
       if (block.num_bytes <= 0) {
         continue;
@@ -101,10 +107,16 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
       Range range;
       range.start = static_cast<uint32_t>(block.snes_offset);
       range.end = static_cast<uint32_t>(block.snes_offset + block.num_bytes);
-      ranges.push_back(range);
+      if (check_org_collision) {
+        ranges.push_back(range);
+      }
+      if (check_bank_capacity) {
+        uint8_t bank = (block.snes_offset >> 16) & 0xFF;
+        bank_usage[bank] += block.num_bytes;
+      }
       
       // Hook Validation
-      if (options.warn_unauthorized_hook) {
+      if (check_hooks) {
         // Simple heuristic: if it's in a sensitive region (e.g. Bank 0-3 non-freespace)
         // For OoS, sensitive regions are usually fixed code banks.
         // Let's check against known_hooks.
@@ -132,12 +144,7 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
     }
     
     // Bank Capacity
-    if (options.warn_bank_full_percent > 0) {
-      std::unordered_map<uint8_t, size_t> bank_usage;
-      for (const auto& block : result.written_blocks) {
-        uint8_t bank = (block.snes_offset >> 16) & 0xFF;
-        bank_usage[bank] += block.num_bytes;
-      }
+    if (check_bank_capacity) {
       for (const auto& pair : bank_usage) {
         double percent = (pair.second / 32768.0) * 100.0; // Assuming LoROM 32KB banks
         if (percent > options.warn_bank_full_percent) {
@@ -148,24 +155,26 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
       }
     }
 
-    std::sort(ranges.begin(), ranges.end(),
-              [](const Range& a, const Range& b) {
-                if (a.start != b.start) {
-                  return a.start < b.start;
-                }
-                return a.end < b.end;
-              });
-    for (size_t i = 1; i < ranges.size(); ++i) {
-      const auto& prev = ranges[i - 1];
-      const auto& curr = ranges[i];
-      if (curr.start < prev.end) {
-        std::string message = "ORG collision: overlap between $";
-        char buffer[64];
-        std::snprintf(buffer, sizeof(buffer), "%06X-$%06X and $%06X-$%06X",
-                      prev.start, prev.end - 1, curr.start, curr.end - 1);
-        message += buffer;
-        AddDiagnostic(&out, DiagnosticSeverity::kError, message, curr.start,
-                      sources);
+    if (check_org_collision) {
+      std::sort(ranges.begin(), ranges.end(),
+                [](const Range& a, const Range& b) {
+                  if (a.start != b.start) {
+                    return a.start < b.start;
+                  }
+                  return a.end < b.end;
+                });
+      for (size_t i = 1; i < ranges.size(); ++i) {
+        const auto& prev = ranges[i - 1];
+        const auto& curr = ranges[i];
+        if (curr.start < prev.end) {
+          std::string message = "ORG collision: overlap between $";
+          char buffer[64];
+          std::snprintf(buffer, sizeof(buffer), "%06X-$%06X and $%06X-$%06X",
+                        prev.start, prev.end - 1, curr.start, curr.end - 1);
+          message += buffer;
+          AddDiagnostic(&out, DiagnosticSeverity::kError, message, curr.start,
+                        sources);
+        }
       }
     }
   }

@@ -684,7 +684,7 @@ int main(int argc, const char* argv[]) {
 
   fs::create_directories(options.out_dir);
 
-  int total_banks = static_cast<int>(rom.size() / 0x8000);
+  int total_banks = static_cast<int>((rom.size() + 0x7FFF) / 0x8000);
   int bank_start = std::max(0, options.bank_start);
   int bank_end = options.bank_end >= 0 ? options.bank_end : (total_banks - 1);
   bank_end = std::min(bank_end, total_banks - 1);

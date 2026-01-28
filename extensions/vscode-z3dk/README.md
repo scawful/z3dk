@@ -9,6 +9,7 @@ Z3DK provides Asar syntax highlighting, z3lsp language features, and Zelda 3 too
 - Z3DK Activity Bar view with quick actions
 - Dashboard view with integration status (yaze, Mesen2, ROM paths, USDASM, models, Continue)
 - Label Search panel (hack + USDASM indexes)
+- ROM Map view (bank usage + quick actions)
 - Emulator launchers + disassembly lab controls
 - Compact status bar indicators (Z3DK, LSP, ROM/Symbols)
 - Editor context menu actions + editor title LSP indicator for 65816/Asar files
@@ -118,6 +119,7 @@ cd ~/src/hobby/z3dk/extensions/vscode-z3dk
 - `Z3DK: Latest Disasm`
 - `Z3DK: Label Search`
 - `Z3DK: Label Search Panel`
+- `Z3DK: Open ROM Map`
 - `Z3DK: Regenerate Label Index`
 - `Z3DK: USDASM Search`
 - `Z3DK: USDASM Root`

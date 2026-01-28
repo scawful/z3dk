@@ -7,6 +7,7 @@ const vscode = require('vscode');
 let LanguageClient;
 
 let client;
+let clientStartPromise;
 let outputChannel;
 let terminal;
 let commandProvider;
@@ -1098,7 +1099,7 @@ function resolveContinueConfigTsPath(config) {
 
 function resolveServerPath(config, rootDir) {
   const explicit = expandHome(config.get('serverPath'));
-  if (explicit) {
+  if (explicit && fs.existsSync(explicit)) {
     return explicit;
   }
   if (process.env.Z3LSP_PATH) {
@@ -1154,6 +1155,33 @@ function ensureOutputChannel() {
     outputChannel = vscode.window.createOutputChannel('Z3DK');
   }
   return outputChannel;
+}
+
+function describeClient(value) {
+  if (!value) {
+    return 'none';
+  }
+  const type = typeof value;
+  const ctor = value && value.constructor ? value.constructor.name : 'unknown';
+  const keys = [];
+  try {
+    keys.push(...Object.keys(value).slice(0, 10));
+  } catch (_) {
+    // ignore
+  }
+  return `${type} ${ctor} keys=[${keys.join(', ')}]`;
+}
+
+async function resolveClientValue(value) {
+  if (value && typeof value.then === 'function') {
+    try {
+      return await value;
+    } catch (err) {
+      ensureOutputChannel().appendLine(`[Z3DK] Failed to resolve client promise: ${err}`);
+      return undefined;
+    }
+  }
+  return value;
 }
 
 function loadLanguageClient() {
@@ -1631,12 +1659,28 @@ function setLspActive(active) {
 }
 
 class CommandItem extends vscode.TreeItem {
-  constructor(label, command, tooltip, iconId) {
+  constructor(label, command, tooltip, iconId, kind) {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.command = command;
     this.tooltip = tooltip || label;
+    if (kind) {
+      this.description = kind;
+    }
     if (iconId) {
       this.iconPath = new vscode.ThemeIcon(iconId);
+    }
+  }
+}
+
+class CommandGroupItem extends vscode.TreeItem {
+  constructor(label, children, iconId, tooltip) {
+    super(label, vscode.TreeItemCollapsibleState.Expanded);
+    this.children = children;
+    if (iconId) {
+      this.iconPath = new vscode.ThemeIcon(iconId);
+    }
+    if (tooltip) {
+      this.tooltip = tooltip;
     }
   }
 }
@@ -1657,182 +1701,263 @@ class Z3dkCommandProvider {
   }
 
   getChildren(element) {
-    if (element) {
-      return [];
+    if (!element) {
+      return this.buildItems();
     }
-    return this.buildItems();
+    if (element.children) {
+      return element.children;
+    }
+    return [];
   }
 
   buildItems() {
+    const makeCommand = (label, commandId, tooltip, iconId, kind) =>
+      new CommandItem(label, { command: commandId, title: label }, tooltip, iconId, kind);
+
+    const makeGroup = (label, children, iconId, tooltip) => new CommandGroupItem(label, children, iconId, tooltip);
+
     return [
-      new CommandItem(
-        'Workspace',
-        { command: 'z3dk.openWorkspace', title: 'Open Dev Workspace' },
-        'Open the multi-root workspace for Oracle + Yaze + Z3DK',
-        'file-directory'
-      ),
-      new CommandItem(
-        'Select Project',
-        { command: 'z3dk.selectProject', title: 'Select Project Root' },
-        'Pick the active Z3DK project root',
-        'target'
-      ),
-      new CommandItem(
-        'Main ASM',
-        { command: 'z3dk.openMainAsm', title: 'Open Main ASM' },
-        'Open the main ASM entrypoint from z3dk.toml',
-        'file-code'
-      ),
-      new CommandItem(
-        'Dashboard',
-        { command: 'z3dk.openDashboard', title: 'Open Dashboard' },
-        'Open the Z3DK dashboard view',
-        'layout'
-      ),
-      new CommandItem(
-        'Labels',
-        { command: 'z3dk.openLabelSearch', title: 'Open Label Search' },
-        'Open the label search panel',
-        'symbol-keyword'
-      ),
-      new CommandItem(
-        'README',
-        { command: 'z3dk.openReadme', title: 'Open Z3DK README' },
-        'Open Z3DK README',
-        'book'
-      ),
-      new CommandItem(
-        'Model Catalog',
-        { command: 'z3dk.openModelCatalog', title: 'Open Model Catalog' },
-        'Open the Zelda model catalog',
-        'library'
-      ),
-      new CommandItem(
-        'Model Portfolio',
-        { command: 'z3dk.openModelPortfolio', title: 'Open Model Portfolio' },
-        'Open the AFS model portfolio',
-        'map'
-      ),
-      new CommandItem(
-        'Continue TS',
-        { command: 'z3dk.openContinueConfigTs', title: 'Open Continue Config (TS)' },
-        'Open Continue config.ts',
-        'gear'
-      ),
-      new CommandItem(
-        'Continue YAML',
-        { command: 'z3dk.openContinueConfig', title: 'Open Continue Config (YAML)' },
-        'Open Continue config.yaml',
-        'gear'
-      ),
-      new CommandItem(
-        'AFS Scratchpad',
-        { command: 'z3dk.openAfsScratchpad', title: 'Open AFS Scratchpad' },
-        'Open the z3dk AFS scratchpad',
-        'note'
-      ),
-      new CommandItem(
-        'Add AFS Contexts',
-        { command: 'z3dk.addAfsContexts', title: 'Add AFS Context Folders' },
-        'Add .context folders to the workspace',
-        'root-folder'
-      ),
-      new CommandItem(
-        'Build',
-        { command: 'z3dk.build', title: 'Build Z3DK' },
-        'Run the configured build command',
-        'tools'
-      ),
-      new CommandItem(
-        'Tests',
-        { command: 'z3dk.runTests', title: 'Run Z3DK Tests' },
-        'Run regression tests',
-        'beaker'
-      ),
-      new CommandItem(
-        'Symbols',
-        { command: 'z3dk.exportSymbols', title: 'Export Mesen Symbols' },
-        'Export Mesen .mlb symbols via yaze',
-        'database'
-      ),
-      new CommandItem(
-        'Regen Labels',
-        { command: 'z3dk.generateLabelIndex', title: 'Generate Label Index' },
-        'Regenerate label indexes',
-        'refresh'
-      ),
-      new CommandItem(
-        'Mesen2',
-        { command: 'z3dk.launchMesen', title: 'Mesen2-OOS' },
-        'Launch Mesen2-OOS with optional ROM args',
-        'debug-alt-small'
-      ),
-      new CommandItem(
-        'yaze',
-        { command: 'z3dk.launchYaze', title: 'yaze' },
-        'Launch yaze with optional ROM args',
-        'rocket'
-      ),
-      new CommandItem(
-        'Hack Disasm',
-        { command: 'z3dk.exportDisassembly', title: 'Export Hack Disassembly' },
-        'Export USDASM-style disassembly of the hack',
-        'symbol-structure'
-      ),
-      new CommandItem(
-        'Latest Bank',
-        { command: 'z3dk.openLatestDisassemblyFile', title: 'Open Latest Disassembly File' },
-        'Open the most recently generated bank_XX.asm',
-        'history'
-      ),
-      new CommandItem(
-        'Disasm Output',
-        { command: 'z3dk.openDisassemblyOutput', title: 'Open Disassembly Output' },
-        'Open the disassembly output folder',
-        'folder-opened'
-      ),
-      new CommandItem(
-        'Disasm File',
-        { command: 'z3dk.openDisassemblyFile', title: 'Open Disassembly File' },
-        'Open a disassembly file from the output folder',
-        'file'
-      ),
-      new CommandItem(
-        'Label Search',
-        { command: 'z3dk.findLabel', title: 'Find Label' },
-        'Search hack + USDASM labels',
-        'search'
-      ),
-      new CommandItem(
-        'USDASM Search',
-        { command: 'z3dk.findUsdasmLabel', title: 'Find USDASM Label' },
-        'Search USDASM for a label',
-        'search'
-      ),
-      new CommandItem(
-        'USDASM Root',
-        { command: 'z3dk.openUsdasmRoot', title: 'Open USDASM Root' },
-        'Open USDASM source-of-truth disassembly',
-        'folder'
-      ),
-      new CommandItem(
-        'ROM Folder',
-        { command: 'z3dk.openRomFolder', title: 'Open ROM Folder' },
-        'Reveal ROM folder in Explorer',
-        'file-submodule'
-      ),
-      new CommandItem(
-        'Select ROM',
-        { command: 'z3dk.selectRom', title: 'Select ROM' },
-        'Pick a ROM for z3dk commands',
-        'file'
-      ),
-      new CommandItem(
-        'Restart LSP',
-        { command: 'z3dk.restartServer', title: 'Restart Language Server' },
-        'Restart z3lsp',
-        'refresh'
-      )
+      makeGroup('Backend (server)', [
+        makeCommand(
+          'Build Z3DK',
+          'z3dk.build',
+          'Run the configured build command',
+          'tools',
+          'Server'
+        ),
+        makeCommand(
+          'Run Tests',
+          'z3dk.runTests',
+          'Run regression tests',
+          'beaker',
+          'Server'
+        ),
+        makeCommand(
+          'Export Symbols',
+          'z3dk.exportSymbols',
+          'Export Mesen .mlb symbols via yaze',
+          'database',
+          'Server'
+        ),
+        makeCommand(
+          'Export Hack Disasm',
+          'z3dk.exportDisassembly',
+          'Export USDASM-style disassembly of the hack',
+          'symbol-structure',
+          'Server'
+        ),
+        makeCommand(
+          'Generate Label Index',
+          'z3dk.generateLabelIndex',
+          'Regenerate label indexes',
+          'refresh',
+          'Server'
+        ),
+        makeCommand(
+          'Restart Language Server',
+          'z3dk.restartServer',
+          'Restart z3lsp',
+          'pulse',
+          'Server'
+        )
+      ], 'server', 'Commands that talk to z3lsp or run build/test tools'),
+      makeGroup('ROM & Project', [
+        makeCommand(
+          'Select Project Root',
+          'z3dk.selectProject',
+          'Pick the active Z3DK project root',
+          'target',
+          'Select'
+        ),
+        makeCommand(
+          'Select ROM',
+          'z3dk.selectRom',
+          'Pick a ROM for z3dk commands',
+          'file',
+          'Select'
+        ),
+        makeCommand(
+          'Open Main ASM',
+          'z3dk.openMainAsm',
+          'Open the main ASM entrypoint from z3dk.toml',
+          'file-code',
+          'Open'
+        ),
+        makeCommand(
+          'Open ROM Folder',
+          'z3dk.openRomFolder',
+          'Reveal ROM folder in Explorer',
+          'file-submodule',
+          'Open'
+        ),
+        makeCommand(
+          'Open ROM Map',
+          'z3dk.openRomMap',
+          'Open the ROM map view',
+          'map',
+          'Panel'
+        ),
+        makeCommand(
+          'Open Yaze Log',
+          'z3dk.openYazeLog',
+          'Open the yaze log file',
+          'output',
+          'Open'
+        )
+      ], 'settings-gear', 'Project + ROM configuration and navigation'),
+      makeGroup('Disassembly & Labels', [
+        makeCommand(
+          'Open Label Search Panel',
+          'z3dk.openLabelSearch',
+          'Open the label search panel',
+          'symbol-keyword',
+          'Panel'
+        ),
+        makeCommand(
+          'Search Labels',
+          'z3dk.findLabel',
+          'Search hack + USDASM labels',
+          'search',
+          'Search'
+        ),
+        makeCommand(
+          'Search USDASM Label',
+          'z3dk.findUsdasmLabel',
+          'Search USDASM for a label',
+          'search',
+          'Search'
+        ),
+        makeCommand(
+          'Open USDASM Root',
+          'z3dk.openUsdasmRoot',
+          'Open USDASM source-of-truth disassembly',
+          'folder',
+          'Open'
+        ),
+        makeCommand(
+          'Open Latest Disasm',
+          'z3dk.openLatestDisassemblyFile',
+          'Open the most recently generated bank_XX.asm',
+          'history',
+          'Open'
+        ),
+        makeCommand(
+          'Open Disasm Output',
+          'z3dk.openDisassemblyOutput',
+          'Open the disassembly output folder',
+          'folder-opened',
+          'Open'
+        ),
+        makeCommand(
+          'Open Disasm File',
+          'z3dk.openDisassemblyFile',
+          'Open a disassembly file from the output folder',
+          'file',
+          'Open'
+        )
+      ], 'symbol-structure', 'Disassembly outputs and label search helpers'),
+      makeGroup('Emulators & Tools', [
+        makeCommand(
+          'Launch Mesen2',
+          'z3dk.launchMesen',
+          'Launch Mesen2-OOS with optional ROM args',
+          'debug-alt-small',
+          'Launch'
+        ),
+        makeCommand(
+          'Launch yaze',
+          'z3dk.launchYaze',
+          'Launch yaze with optional ROM args',
+          'rocket',
+          'Launch'
+        )
+      ], 'debug-alt', 'External tools and emulators'),
+      makeGroup('Workspace & Resources', [
+        makeCommand(
+          'Open Workspace',
+          'z3dk.openWorkspace',
+          'Open the multi-root workspace for Oracle + Yaze + Z3DK',
+          'file-directory',
+          'Open'
+        ),
+        makeCommand(
+          'Open Dashboard',
+          'z3dk.openDashboard',
+          'Open the Z3DK dashboard view',
+          'layout',
+          'Panel'
+        ),
+        makeCommand(
+          'Open README',
+          'z3dk.openReadme',
+          'Open Z3DK README',
+          'book',
+          'Open'
+        ),
+        makeCommand(
+          'Open Oracle Repo',
+          'z3dk.openOracleRepo',
+          'Open the Oracle of Secrets repo',
+          'repo',
+          'Open'
+        ),
+        makeCommand(
+          'Open Yaze Repo',
+          'z3dk.openYazeRepo',
+          'Open the yaze repo',
+          'repo',
+          'Open'
+        ),
+        makeCommand(
+          'Open Mesen2 Repo',
+          'z3dk.openMesenRepo',
+          'Open the Mesen2-OOS repo',
+          'repo',
+          'Open'
+        ),
+        makeCommand(
+          'Open Model Catalog',
+          'z3dk.openModelCatalog',
+          'Open the Zelda model catalog',
+          'library',
+          'Open'
+        ),
+        makeCommand(
+          'Open Model Portfolio',
+          'z3dk.openModelPortfolio',
+          'Open the AFS model portfolio',
+          'map',
+          'Open'
+        ),
+        makeCommand(
+          'Open Continue Config (TS)',
+          'z3dk.openContinueConfigTs',
+          'Open Continue config.ts',
+          'gear',
+          'Open'
+        ),
+        makeCommand(
+          'Open Continue Config (YAML)',
+          'z3dk.openContinueConfig',
+          'Open Continue config.yaml',
+          'gear',
+          'Open'
+        ),
+        makeCommand(
+          'Open AFS Scratchpad',
+          'z3dk.openAfsScratchpad',
+          'Open the z3dk AFS scratchpad',
+          'note',
+          'Open'
+        ),
+        makeCommand(
+          'Add AFS Contexts',
+          'z3dk.addAfsContexts',
+          'Add .context folders to the workspace',
+          'root-folder',
+          'Workspace'
+        )
+      ], 'book', 'Docs, repos, and dev resources')
     ];
   }
 }
@@ -1873,6 +1998,8 @@ class Z3dkDashboardProvider {
         'z3dk.openYazeRepo',
         'z3dk.openMesenRepo',
         'z3dk.openUsdasmRoot',
+        'z3dk.openRomMap',
+        'z3dk.openLabelSearch',
         'z3dk.findLabel',
         'z3dk.findUsdasmLabel',
         'z3dk.exportDisassembly',
@@ -2062,9 +2189,11 @@ class Z3dkRomMapProvider {
       return;
     }
     let activeClient = client;
+    activeClient = await resolveClientValue(activeClient);
     if (!activeClient) {
       activeClient = await startClient(this.context);
     }
+    activeClient = await resolveClientValue(activeClient);
     if (!activeClient) {
       this.view.webview.postMessage({
         command: 'status',
@@ -2073,10 +2202,24 @@ class Z3dkRomMapProvider {
       });
       return;
     }
+    if (typeof activeClient.start !== 'function' || typeof activeClient.sendRequest !== 'function') {
+      ensureOutputChannel().appendLine(`[Z3DK] LSP client is invalid; restarting. ${describeClient(activeClient)}`);
+      await restartClient(this.context);
+      activeClient = client;
+    }
+    if (!activeClient || typeof activeClient.start !== 'function' || typeof activeClient.sendRequest !== 'function') {
+      ensureOutputChannel().appendLine(`[Z3DK] LSP client still invalid after restart. ${describeClient(activeClient)}`);
+      this.view.webview.postMessage({
+        command: 'status',
+        state: 'error',
+        message: 'Z3LSP client invalid. Reload the window or reinstall the extension.'
+      });
+      return;
+    }
     try {
-      await activeClient.onReady();
+      await activeClient.start();
     } catch (err) {
-      ensureOutputChannel().appendLine(`[Z3DK] LSP failed to become ready: ${err}`);
+      ensureOutputChannel().appendLine(`[Z3DK] LSP failed to start: ${err}`);
       this.view.webview.postMessage({
         command: 'status',
         state: 'error',
@@ -2153,18 +2296,45 @@ function buildRomMapHtml(context) {
           font-weight: 600;
         }
 
-        .refresh-btn {
-          cursor: pointer;
-          background: transparent;
-          border: 1px solid var(--border);
-          color: var(--subtle);
-          padding: 2px 6px;
-          border-radius: 4px;
-        }
-
         .actions {
           display: flex;
           gap: 4px;
+          flex-wrap: wrap;
+        }
+
+        .action-link {
+          appearance: none;
+          cursor: pointer;
+          background: transparent;
+          border: 1px solid transparent;
+          color: var(--vscode-textLink-foreground, #4da3ff);
+          padding: 2px 6px;
+          border-radius: 999px;
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.4px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .action-link .icon {
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          padding: 1px 4px;
+          font-size: 8px;
+          color: var(--ink);
+          background: rgba(255, 255, 255, 0.04);
+        }
+
+        .action-link:hover {
+          border-color: rgba(77, 163, 255, 0.35);
+          background: rgba(77, 163, 255, 0.08);
+        }
+
+        .action-link:focus-visible {
+          outline: 1px solid rgba(77, 163, 255, 0.6);
+          outline-offset: 2px;
         }
 
         .summary {
@@ -2277,9 +2447,18 @@ function buildRomMapHtml(context) {
       <div class="header">
         <div class="title">ROM Bank Usage</div>
         <div class="actions">
-          <button class="refresh-btn" id="selectRom">Select ROM</button>
-          <button class="refresh-btn" id="openMainAsm">Main ASM</button>
-          <button class="refresh-btn" id="refresh">Refresh</button>
+          <button class="action-link" id="selectRom" title="Select ROM">
+            <span class="icon">ROM</span>
+            <span class="label">Select</span>
+          </button>
+          <button class="action-link" id="openMainAsm" title="Open main ASM">
+            <span class="icon">ASM</span>
+            <span class="label">Open</span>
+          </button>
+          <button class="action-link" id="refresh" title="Refresh ROM map">
+            <span class="icon">REF</span>
+            <span class="label">Refresh</span>
+          </button>
         </div>
       </div>
       <div class="status" id="status">Waiting for z3lsp…</div>
@@ -2514,6 +2693,124 @@ function buildDashboardHtml(context) {
     romInfo.source ? `rom ${romInfo.source}` : 'rom unset'
   ];
 
+  const legendItems = [
+    { kind: 'server', label: 'server' },
+    { kind: 'open', label: 'open' },
+    { kind: 'select', label: 'select' },
+    { kind: 'launch', label: 'launch' },
+    { kind: 'search', label: 'search' },
+    { kind: 'panel', label: 'panel' },
+    { kind: 'workspace', label: 'workspace' }
+  ];
+
+  const actionGroups = [
+    {
+      title: 'Backend (server)',
+      hint: 'Runs z3dk/z3lsp commands',
+      layout: 'grid',
+      open: true,
+      actions: [
+        { label: 'Build Z3DK', command: 'z3dk.build', kind: 'server', primary: true },
+        { label: 'Run Tests', command: 'z3dk.runTests', kind: 'server' },
+        { label: 'Export Symbols', command: 'z3dk.exportSymbols', kind: 'server' },
+        { label: 'Export Hack Disasm', command: 'z3dk.exportDisassembly', kind: 'server', primary: true },
+        { label: 'Generate Label Index', command: 'z3dk.generateLabelIndex', kind: 'server' },
+        { label: 'Restart LSP', command: 'z3dk.restartServer', kind: 'server' }
+      ]
+    },
+    {
+      title: 'ROM & Project',
+      hint: 'Configure project and ROM paths',
+      layout: 'grid',
+      actions: [
+        { label: 'Select Project Root', command: 'z3dk.selectProject', kind: 'select', primary: true },
+        { label: 'Select ROM', command: 'z3dk.selectRom', kind: 'select', primary: true },
+        { label: 'Open Main ASM', command: 'z3dk.openMainAsm', kind: 'open' },
+        { label: 'Open ROM Folder', command: 'z3dk.openRomFolder', kind: 'open' },
+        { label: 'Open ROM Map', command: 'z3dk.openRomMap', kind: 'panel', primary: true }
+      ]
+    },
+    {
+      title: 'Emulators & Tools',
+      hint: 'Launch external apps or logs',
+      layout: 'grid',
+      actions: [
+        { label: 'Launch Mesen2', command: 'z3dk.launchMesen', kind: 'launch', primary: true },
+        { label: 'Launch yaze', command: 'z3dk.launchYaze', kind: 'launch' },
+        { label: 'Open yaze Log', command: 'z3dk.openYazeLog', kind: 'open' }
+      ]
+    },
+    {
+      title: 'Disassembly & Labels',
+      hint: 'Search labels and open disassembly output',
+      actions: [
+        { label: 'Open Label Search Panel', command: 'z3dk.openLabelSearch', kind: 'panel', primary: true },
+        { label: 'Search Labels', command: 'z3dk.findLabel', kind: 'search' },
+        { label: 'Search USDASM Labels', command: 'z3dk.findUsdasmLabel', kind: 'search' },
+        { label: 'Open USDASM Root', command: 'z3dk.openUsdasmRoot', kind: 'open' },
+        { label: 'Open Latest Disasm', command: 'z3dk.openLatestDisassemblyFile', kind: 'open' },
+        { label: 'Open Disasm Output', command: 'z3dk.openDisassemblyOutput', kind: 'open' },
+        { label: 'Open Disasm File', command: 'z3dk.openDisassemblyFile', kind: 'open' }
+      ]
+    },
+    {
+      title: 'Workspace & Resources',
+      hint: 'Docs, repos, and configs',
+      actions: [
+        { label: 'Open Workspace', command: 'z3dk.openWorkspace', kind: 'open' },
+        { label: 'Open Dashboard', command: 'z3dk.openDashboard', kind: 'panel' },
+        { label: 'Open README', command: 'z3dk.openReadme', kind: 'open' },
+        { label: 'Open Oracle Repo', command: 'z3dk.openOracleRepo', kind: 'open' },
+        { label: 'Open yaze Repo', command: 'z3dk.openYazeRepo', kind: 'open' },
+        { label: 'Open Mesen2 Repo', command: 'z3dk.openMesenRepo', kind: 'open' },
+        { label: 'Open Model Catalog', command: 'z3dk.openModelCatalog', kind: 'open' },
+        { label: 'Open Model Portfolio', command: 'z3dk.openModelPortfolio', kind: 'open' },
+        { label: 'Open Continue Config (TS)', command: 'z3dk.openContinueConfigTs', kind: 'open' },
+        { label: 'Open Continue Config (YAML)', command: 'z3dk.openContinueConfig', kind: 'open' },
+        { label: 'Open AFS Scratchpad', command: 'z3dk.openAfsScratchpad', kind: 'open' },
+        { label: 'Add AFS Contexts', command: 'z3dk.addAfsContexts', kind: 'workspace' },
+        { label: 'Refresh Dashboard', command: 'z3dk.refreshDashboard', kind: 'panel' }
+      ]
+    }
+  ];
+
+  const legendHtml = legendItems
+    .map(item => `<span class="tag tag-${item.kind}">${escapeHtml(item.label)}</span>`)
+    .join('');
+
+  const renderAction = action => {
+    const tag = action.tag || action.kind || '';
+    const tagHtml = tag ? `<span class="tag tag-${action.kind}">${escapeHtml(tag)}</span>` : '';
+    const kindClass = action.kind ? `kind-${action.kind}` : '';
+    const primaryClass = action.primary ? 'primary' : '';
+    const className = ['action', kindClass, primaryClass].filter(Boolean).join(' ');
+    return `
+      <button class="${className}" data-command="${action.command}" data-kind="${action.kind}">
+        <span class="action-title">${escapeHtml(action.label)}</span>
+        ${tagHtml}
+      </button>
+    `;
+  };
+
+  const actionSections = actionGroups
+    .map(group => {
+      const layoutClass = group.layout === 'grid' ? 'action-grid' : 'action-list';
+      const hintHtml = group.hint ? `<div class="group-hint">${escapeHtml(group.hint)}</div>` : '';
+      const actionsHtml = group.actions.map(renderAction).join('');
+      return `
+        <details class="group"${group.open ? ' open' : ''}>
+          <summary>${escapeHtml(group.title)}</summary>
+          <div class="group-body">
+            ${hintHtml}
+            <div class="${layoutClass}">
+              ${actionsHtml}
+            </div>
+          </div>
+        </details>
+      `;
+    })
+    .join('');
+
     return `
     <!DOCTYPE html>
     <html lang="en">
@@ -2529,6 +2826,7 @@ function buildDashboardHtml(context) {
           --border: var(--vscode-editorWidget-border, rgba(255, 255, 255, 0.08));
           --ok: #3fb99a;
           --warn: #d08a4a;
+          --accent: #4da3ff;
         }
 
         body {
@@ -2562,6 +2860,21 @@ function buildDashboardHtml(context) {
         .stack {
           display: grid;
           gap: 6px;
+        }
+
+        .legend {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-bottom: 6px;
+          align-items: center;
+        }
+
+        .legend-title {
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          color: var(--subtle);
         }
 
         details.group {
@@ -2610,6 +2923,11 @@ function buildDashboardHtml(context) {
           gap: 6px;
         }
 
+        .group-hint {
+          font-size: 9px;
+          color: var(--subtle);
+        }
+
         .action-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2637,6 +2955,10 @@ function buildDashboardHtml(context) {
           line-height: 1.4;
           color: var(--ink);
           text-align: left;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 6px;
           cursor: pointer;
         }
 
@@ -2648,6 +2970,91 @@ function buildDashboardHtml(context) {
           font-weight: 600;
           color: var(--vscode-textLink-foreground, #4da3ff);
           border-color: rgba(77, 163, 255, 0.2);
+        }
+
+        button.action.kind-server {
+          border-left: 2px solid rgba(77, 163, 255, 0.5);
+        }
+
+        button.action.kind-open {
+          border-left: 2px solid rgba(63, 185, 154, 0.5);
+        }
+
+        button.action.kind-select {
+          border-left: 2px solid rgba(209, 182, 92, 0.5);
+        }
+
+        button.action.kind-launch {
+          border-left: 2px solid rgba(208, 138, 74, 0.5);
+        }
+
+        button.action.kind-search {
+          border-left: 2px solid rgba(107, 183, 199, 0.5);
+        }
+
+        button.action.kind-panel {
+          border-left: 2px solid rgba(138, 163, 255, 0.5);
+        }
+
+        button.action.kind-workspace {
+          border-left: 2px solid rgba(154, 163, 173, 0.5);
+        }
+
+        .action-title {
+          flex: 1;
+        }
+
+        .tag {
+          padding: 1px 5px;
+          border-radius: 999px;
+          font-size: 8px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          border: 1px solid transparent;
+          color: var(--subtle);
+          white-space: nowrap;
+        }
+
+        .tag-server {
+          color: var(--accent);
+          border-color: rgba(77, 163, 255, 0.4);
+          background: rgba(77, 163, 255, 0.12);
+        }
+
+        .tag-open {
+          color: var(--ok);
+          border-color: rgba(63, 185, 154, 0.4);
+          background: rgba(63, 185, 154, 0.12);
+        }
+
+        .tag-select {
+          color: #d1b65c;
+          border-color: rgba(209, 182, 92, 0.4);
+          background: rgba(209, 182, 92, 0.12);
+        }
+
+        .tag-launch {
+          color: var(--warn);
+          border-color: rgba(208, 138, 74, 0.4);
+          background: rgba(208, 138, 74, 0.12);
+        }
+
+        .tag-search {
+          color: #6bb7c7;
+          border-color: rgba(107, 183, 199, 0.4);
+          background: rgba(107, 183, 199, 0.12);
+        }
+
+        .tag-panel {
+          color: #8aa3ff;
+          border-color: rgba(138, 163, 255, 0.4);
+          background: rgba(138, 163, 255, 0.12);
+        }
+
+        .tag-workspace {
+          color: #9aa3ad;
+          border-color: rgba(154, 163, 173, 0.4);
+          background: rgba(154, 163, 173, 0.12);
         }
 
         .status {
@@ -2706,76 +3113,8 @@ function buildDashboardHtml(context) {
       </div>
 
       <div class="stack">
-        <details class="group" open>
-          <summary>Quick</summary>
-          <div class="group-body">
-            <div class="action-grid">
-              <button class="action primary" data-command="z3dk.build">Build</button>
-              <button class="action primary" data-command="z3dk.exportDisassembly">Hack Disasm</button>
-              <button class="action" data-command="z3dk.launchMesen">Mesen2</button>
-              <button class="action" data-command="z3dk.launchYaze">yaze</button>
-            </div>
-          </div>
-        </details>
-
-        <details class="group">
-          <summary>Build &amp; LSP</summary>
-          <div class="group-body">
-            <div class="action-list">
-              <button class="action" data-command="z3dk.runTests">Tests</button>
-              <button class="action" data-command="z3dk.exportSymbols">Symbols</button>
-              <button class="action" data-command="z3dk.restartServer">Restart LSP</button>
-            </div>
-          </div>
-        </details>
-
-        <details class="group">
-          <summary>Disasm</summary>
-          <div class="group-body">
-            <div class="action-list">
-              <button class="action" data-command="z3dk.openLatestDisassemblyFile">Latest Bank</button>
-              <button class="action" data-command="z3dk.openDisassemblyOutput">Disasm Output</button>
-              <button class="action" data-command="z3dk.findLabel">Label Search</button>
-              <button class="action" data-command="z3dk.findUsdasmLabel">USDASM Search</button>
-              <button class="action" data-command="z3dk.openDisassemblyFile">Disasm File</button>
-              <button class="action" data-command="z3dk.openUsdasmRoot">USDASM Root</button>
-            </div>
-          </div>
-        </details>
-
-        <details class="group">
-          <summary>Run &amp; ROM</summary>
-          <div class="group-body">
-            <div class="action-list">
-              <button class="action" data-command="z3dk.openMainAsm">Main ASM</button>
-              <button class="action" data-command="z3dk.openRomFolder">ROM Folder</button>
-              <button class="action" data-command="z3dk.selectRom">Select ROM</button>
-              <button class="action" data-command="z3dk.selectProject">Select Project</button>
-              <button class="action" data-command="z3dk.openYazeLog">Yaze Log</button>
-              <button class="action" data-command="z3dk.refreshDashboard">Refresh</button>
-            </div>
-          </div>
-        </details>
-
-        <details class="group">
-          <summary>Resources</summary>
-          <div class="group-body">
-            <div class="action-list">
-              <button class="action" data-command="z3dk.openWorkspace">Workspace</button>
-              <button class="action" data-command="z3dk.openReadme">README</button>
-              <button class="action" data-command="z3dk.openOracleRepo">Oracle Repo</button>
-              <button class="action" data-command="z3dk.openYazeRepo">Yaze Repo</button>
-              <button class="action" data-command="z3dk.openMesenRepo">Mesen2 Repo</button>
-              <button class="action" data-command="z3dk.openModelCatalog">Model Catalog</button>
-              <button class="action" data-command="z3dk.openModelPortfolio">Model Portfolio</button>
-              <button class="action" data-command="z3dk.openContinueConfigTs">Continue TS</button>
-              <button class="action" data-command="z3dk.openContinueConfig">Continue YAML</button>
-              <button class="action" data-command="z3dk.openAfsScratchpad">AFS Scratchpad</button>
-              <button class="action" data-command="z3dk.addAfsContexts">Add AFS Contexts</button>
-              <button class="action" data-command="z3dk.generateLabelIndex">Regen Labels</button>
-            </div>
-          </div>
-        </details>
+        <div class="legend"><span class="legend-title">Legend</span>${legendHtml}</div>
+        ${actionSections}
 
         <details class="group" open>
           <summary>Status</summary>
@@ -2851,6 +3190,7 @@ function buildLabelSearchHtml(context) {
           --ink: var(--vscode-editor-foreground, #d4d4d4);
           --subtle: var(--vscode-descriptionForeground, rgba(200, 200, 200, 0.7));
           --border: var(--vscode-editorWidget-border, rgba(255, 255, 255, 0.08));
+          --accent: #4da3ff;
         }
 
         body {
@@ -2885,6 +3225,12 @@ function buildLabelSearchHtml(context) {
           margin-bottom: 8px;
         }
 
+        .toolbar-row {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+        }
+
         .input {
           width: 100%;
           padding: 6px 8px;
@@ -2901,14 +3247,13 @@ function buildLabelSearchHtml(context) {
           flex-wrap: wrap;
         }
 
-        .scope button,
-        .action {
+        .scope button {
           appearance: none;
-          border: 1px solid transparent;
-          border-radius: 4px;
-          padding: 4px 6px;
+          border: 1px solid var(--border);
+          border-radius: 999px;
+          padding: 3px 8px;
           font-size: 10px;
-          background: transparent;
+          background: var(--panel);
           color: var(--ink);
           cursor: pointer;
         }
@@ -2919,8 +3264,39 @@ function buildLabelSearchHtml(context) {
           font-weight: 600;
         }
 
-        .action {
-          margin-left: auto;
+        .toolbar-actions {
+          display: flex;
+          gap: 4px;
+        }
+
+        .action-link {
+          appearance: none;
+          border: 1px solid transparent;
+          border-radius: 999px;
+          padding: 2px 6px;
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          background: transparent;
+          color: var(--vscode-textLink-foreground, var(--accent));
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .action-link .icon {
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          padding: 1px 4px;
+          font-size: 8px;
+          color: var(--ink);
+          background: rgba(255, 255, 255, 0.04);
+        }
+
+        .action-link:hover {
+          border-color: rgba(77, 163, 255, 0.35);
+          background: rgba(77, 163, 255, 0.08);
         }
 
         .results {
@@ -2933,6 +3309,11 @@ function buildLabelSearchHtml(context) {
           border-radius: 6px;
           padding: 6px;
           background: var(--panel);
+        }
+
+        .result:hover {
+          border-color: rgba(77, 163, 255, 0.35);
+          background: rgba(77, 163, 255, 0.06);
         }
 
         .result button {
@@ -2980,13 +3361,23 @@ function buildLabelSearchHtml(context) {
       </div>
 
       <div class="toolbar">
-        <input id="query" class="input" placeholder="Search labels" />
+        <div class="toolbar-row">
+          <input id="query" class="input" placeholder="Search labels" />
+          <div class="toolbar-actions">
+            <button id="regen" class="action-link" title="Regenerate label index">
+              <span class="icon">IDX</span>
+              <span>Regen</span>
+            </button>
+            <button id="refresh" class="action-link" title="Refresh panel">
+              <span class="icon">REF</span>
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
         <div class="scope">
           <button data-scope="all" class="active">All</button>
           <button data-scope="hack">Hack</button>
           <button data-scope="usdasm">USDASM</button>
-          <button id="regen" class="action">Regen</button>
-          <button id="refresh" class="action">Refresh</button>
         </div>
       </div>
 
@@ -3133,7 +3524,7 @@ function buildLabelSearchHtml(context) {
 
 async function startClient(context) {
   if (client) {
-    return client;
+    return resolveClientValue(client);
   }
 
   const config = vscode.workspace.getConfiguration('z3dk');
@@ -3148,6 +3539,10 @@ async function startClient(context) {
   }
 
   const rootDir = z3dkRoot(context) || workspaceRoot();
+  const explicitServer = expandHome(config.get('serverPath'));
+  if (explicitServer && !fs.existsSync(explicitServer)) {
+    vscode.window.showWarningMessage(`Z3DK: z3lsp not found at ${explicitServer}. Falling back to auto-detect.`);
+  }
   const serverPath = resolveServerPath(config, rootDir);
   const serverArgs = config.get('serverArgs') || [];
   const languageIds = getSupportedLanguageIds(config);
@@ -3165,16 +3560,23 @@ async function startClient(context) {
     outputChannel: ensureOutputChannel()
   };
 
-  client = new Client('z3dk', 'Z3DK Language Server', serverOptions, clientOptions);
-  context.subscriptions.push(client.start());
-  client.onReady().then(() => {
-    setLspActive(true);
-    updateStatusBar(context);
-  }).catch(err => {
-    setLspActive(false);
-    ensureOutputChannel().appendLine(`[Z3DK] LSP failed to start: ${err}`);
-    updateStatusBar(context);
-  });
+  const candidate = new Client('z3dk', 'Z3DK Language Server', serverOptions, clientOptions);
+  if (typeof candidate.start !== 'function') {
+    ensureOutputChannel().appendLine(`[Z3DK] LanguageClient missing start: ${describeClient(candidate)}`);
+    vscode.window.showErrorMessage('Z3DK: Failed to initialize language client. Check the Output panel.');
+    return undefined;
+  }
+  client = candidate;
+  clientStartPromise = client.start()
+    .then(() => {
+      setLspActive(true);
+      updateStatusBar(context);
+    })
+    .catch(err => {
+      setLspActive(false);
+      ensureOutputChannel().appendLine(`[Z3DK] LSP failed to start: ${err}`);
+      updateStatusBar(context);
+    });
   updateStatusBar(context);
   return client;
 }
@@ -3185,6 +3587,7 @@ async function stopClient() {
   }
   const current = client;
   client = undefined;
+  clientStartPromise = undefined;
   await current.stop();
   setLspActive(false);
   if (extensionContext) {

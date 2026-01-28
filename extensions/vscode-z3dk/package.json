@@ -295,6 +295,10 @@
           "group": "1_general"
         },
         {
+          "command": "z3dk.openRomMap",
+          "group": "1_general"
+        },
+        {
           "command": "z3dk.openModelCatalog",
           "group": "2_resources"
         },

@@ -1,14 +1,26 @@
 name = "zAsar"
 description = "SNES assembler (65c816, SPC700, Super FX) for ROM patches and homebrew"
-tags = ["game-dev", "romhacking", "snes", "assembler", "c++"]
+aliases = ["z3dk", "z3asm", "z3lsp"]
+tags = ["game-dev", "romhacking", "snes", "assembler", "c++", "active"]
 platforms = ["mac", "linux", "windows"]
 stage = "production"
 is_product = false
 public = true
+
+languages = ["cpp"]
+build_system = "cmake"
 
 [links]
 github = "https://github.com/scawful/zAsar"
 
 [build]
 system = "cmake"
-command = "cmake src && make"
+command = "mkdir -p build && cd build && cmake .. && make"
+
+[test]
+command = "./run_tests.sh"
+
+[sync]
+type = "git"
+direction = "both"
+remote = "server"

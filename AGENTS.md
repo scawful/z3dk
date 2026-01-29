@@ -8,7 +8,8 @@ For all AI agents working on **z3dk** (~/src/hobby/z3dk):
 2.  **Context:** Use the `.context/` folder structure.
 3.  **Build:** Use `run_tests.sh` to verify disassembly integrity.
 4.  **LSP:** key tool: `z3lsp`. Supports Rename, Jump to Def, and error suppression for includes.
-5.  **Purpose:** This repo is used for Zelda3 Disassembly and Development Kit tools.
+5.  **Mesen2:** Socket discovery uses `MESEN2_SOCKET_PATH` when set (aligned with oracle-of-secrets and yaze).
+6.  **Purpose:** This repo is used for Zelda3 Disassembly and Development Kit tools.
 
 ## Static Analysis
 

@@ -455,6 +455,7 @@ class AnalysisResult:
     entry_states: dict[int, RegisterState] = field(default_factory=dict)
     call_graph: Optional[CallGraph] = None
     stack_issues: list[AnalysisDiagnostic] = field(default_factory=list)
+    return_states: dict[int, list[tuple[int, RegisterState]]] = field(default_factory=dict)
 
     def errors(self) -> list[AnalysisDiagnostic]:
         return [d for d in self.diagnostics if d.severity == 'error']
@@ -571,13 +572,14 @@ class StateTracker:
         self.rom = rom_data
         self.mapper = mapper
         self.visited: dict[int, RegisterState] = {}
-        self.pending: list[tuple[int, RegisterState]] = []
+        self.pending: list[tuple[int, RegisterState, int]] = []
         self.cross_refs: list[CrossRef] = []
         self.diagnostics: list[AnalysisDiagnostic] = []
         self.labels: dict[int, str] = {}
         self.call_graph = CallGraph()
         self.routine_starts: Dict[int, int] = {}  # Return addr -> routine start
         self.stack_issues: List[AnalysisDiagnostic] = []
+        self.return_states: Dict[int, List[Tuple[int, RegisterState]]] = defaultdict(list)
 
     def read_byte(self, snes_addr: int) -> Optional[int]:
         """Read a byte from ROM at SNES address."""
@@ -606,11 +608,11 @@ class StateTracker:
     def analyze_from(self, start_addr: int, initial_state: RegisterState) -> None:
         """Analyze code starting from an address with given state."""
         self.call_graph.add_entry_point(start_addr)
-        self.pending.append((start_addr, initial_state))
+        self.pending.append((start_addr, initial_state, start_addr))
 
         while self.pending:
-            addr, state = self.pending.pop(0)
-            self._trace_block(addr, state)
+            addr, state, routine_start = self.pending.pop(0)
+            self._trace_block(addr, state, routine_start)
 
     def _record_call(self, from_addr: int, to_addr: int, kind: str) -> None:
         """Record a call/jump reference in both cross_refs and call_graph."""
@@ -618,7 +620,7 @@ class StateTracker:
         self.cross_refs.append(ref)
         self.call_graph.add_reference(ref)
 
-    def _trace_block(self, addr: int, state: RegisterState) -> None:
+    def _trace_block(self, addr: int, state: RegisterState, routine_start: int) -> None:
         """Trace a basic block of code."""
         current_state = state.copy()
 
@@ -696,7 +698,7 @@ class StateTracker:
                         # Record stack effect of JSR
                         current_state.record_stack_op(addr, 'JSR')
                         # Queue the call target for analysis
-                        self.pending.append((target_addr, current_state.copy()))
+                        self.pending.append((target_addr, current_state.copy(), target_addr))
                 elif size == 3:  # JSL long
                     target = self.read_long(addr + 1)
                     if target is not None:
@@ -704,7 +706,7 @@ class StateTracker:
                         # Record stack effect of JSL
                         current_state.record_stack_op(addr, 'JSL')
                         # Queue the call target for analysis
-                        self.pending.append((target, current_state.copy()))
+                        self.pending.append((target, current_state.copy(), target))
                 # Continue after call (return will bring us back)
                 addr = next_addr
                 continue
@@ -717,6 +719,9 @@ class StateTracker:
                 if opcode == 0x40:  # RTI
                     current_state.m_flag = None
                     current_state.x_flag = None
+
+                # Record return state for the routine start
+                self.return_states[routine_start].append((addr, current_state.copy()))
 
                 # Check stack balance at return
                 # Note: We don't count JSR/JSL/RTS/RTL in the check since
@@ -732,12 +737,12 @@ class StateTracker:
                     if target is not None:
                         target_addr = (addr & 0xFF0000) | target
                         self._record_call(addr, target_addr, mnemonic.lower())
-                        self.pending.append((target_addr, current_state.copy()))
+                        self.pending.append((target_addr, current_state.copy(), routine_start))
                 elif size == 3:
                     target = self.read_long(addr + 1)
                     if target is not None:
                         self._record_call(addr, target, mnemonic.lower())
-                        self.pending.append((target, current_state.copy()))
+                        self.pending.append((target, current_state.copy(), routine_start))
                 return
 
             # Handle branches - queue both paths
@@ -757,12 +762,12 @@ class StateTracker:
 
                 if opcode == 0x80:  # BRA - unconditional
                     self._record_call(addr, target, 'branch')
-                    self.pending.append((target, current_state.copy()))
+                    self.pending.append((target, current_state.copy(), routine_start))
                     return
                 else:
                     # Conditional branch - continue both paths
                     self._record_call(addr, target, 'branch')
-                    self.pending.append((target, current_state.copy()))
+                    self.pending.append((target, current_state.copy(), routine_start))
                     # Fall through to next instruction
                     addr = next_addr
                     continue
@@ -835,6 +840,36 @@ class StateTracker:
                 }
             ))
 
+        # Check common ABI push/pull pairs for mismatches
+        pair_counts = {op.opcode: 0 for op in local_ops}
+        for op in local_ops:
+            pair_counts[op.opcode] = pair_counts.get(op.opcode, 0) + 1
+
+        pairs = [
+            ("PHB", "PLB"),
+            ("PHD", "PLD"),
+            ("PHP", "PLP"),
+            ("PHA", "PLA"),
+            ("PHX", "PLX"),
+            ("PHY", "PLY"),
+        ]
+
+        for push, pull in pairs:
+            pushes = pair_counts.get(push, 0)
+            pulls = pair_counts.get(pull, 0)
+            if pushes != pulls:
+                label = self.labels.get(addr, f"${addr:06X}")
+                self.stack_issues.append(AnalysisDiagnostic(
+                    severity='warning',
+                    message=f"Unbalanced {push}/{pull} at return {label}: pushes={pushes}, pulls={pulls}",
+                    address=addr,
+                    context={
+                        'pushes': pushes,
+                        'pulls': pulls,
+                        'pair': f"{push}/{pull}",
+                    }
+                ))
+
     def validate_stack_balance(self, routine_start: int, routine_end: int) -> List[AnalysisDiagnostic]:
         """Validate stack is balanced between routine entry and RTS/RTL.
 
@@ -894,6 +929,20 @@ def parse_hooks_json(path: Path) -> list[HookInfo]:
     with open(path) as f:
         data = json.load(f)
 
+    def _coerce_width(value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return int(value, 0)
+            except ValueError:
+                return None
+        if isinstance(value, bool):
+            return 8 if value else 16
+        if isinstance(value, (int, float)):
+            return int(value)
+        return None
+
     for hook in data.get('hooks', []):
         addr_str = hook.get('address', '0')
         if addr_str.startswith('0x') or addr_str.startswith('$'):
@@ -901,10 +950,29 @@ def parse_hooks_json(path: Path) -> list[HookInfo]:
         else:
             addr = int(addr_str)
 
+        exp_m = _coerce_width(hook.get('expected_m'))
+        exp_x = _coerce_width(hook.get('expected_x'))
+        exp_exit_m = _coerce_width(hook.get('expected_exit_m'))
+        exp_exit_x = _coerce_width(hook.get('expected_exit_x'))
+        expected_entry_state = None
+        if exp_m is not None or exp_x is not None:
+            expected_entry_state = RegisterState(
+                m_flag=exp_m == 8 if exp_m is not None else None,
+                x_flag=exp_x == 8 if exp_x is not None else None
+            )
+        expected_exit_state = None
+        if exp_exit_m is not None or exp_exit_x is not None:
+            expected_exit_state = RegisterState(
+                m_flag=exp_exit_m == 8 if exp_exit_m is not None else None,
+                x_flag=exp_exit_x == 8 if exp_exit_x is not None else None
+            )
+
         hooks.append(HookInfo(
             name=hook.get('name', f'hook_{addr:06X}'),
             address=addr,
             kind=hook.get('kind', 'jsl'),
+            expected_entry_state=expected_entry_state,
+            expected_exit_state=expected_exit_state,
             source_file=hook.get('source', '').split(':')[0] if ':' in hook.get('source', '') else None,
             source_line=int(hook.get('source', '').split(':')[1]) if ':' in hook.get('source', '') else None,
         ))
@@ -1027,6 +1095,7 @@ def analyze_rom(rom_path: Path,
     result.entry_states = tracker.visited
     result.call_graph = tracker.call_graph
     result.stack_issues = tracker.stack_issues
+    result.return_states = tracker.return_states
 
     # Additional validation
     _validate_hooks(result, tracker)
@@ -1047,6 +1116,61 @@ def _validate_hooks(result: AnalysisResult, tracker: StateTracker) -> None:
             continue
 
         actual_state = tracker.visited[hook.address]
+
+        if hook.expected_entry_state:
+            expected = hook.expected_entry_state
+            issues = []
+            if expected.m_flag is not None and actual_state.m_flag is not None:
+                if expected.m_flag != actual_state.m_flag:
+                    exp = '8-bit' if expected.m_flag else '16-bit'
+                    act = '8-bit' if actual_state.m_flag else '16-bit'
+                    issues.append(f"M flag: expected {exp}, got {act}")
+
+            if expected.x_flag is not None and actual_state.x_flag is not None:
+                if expected.x_flag != actual_state.x_flag:
+                    exp = '8-bit' if expected.x_flag else '16-bit'
+                    act = '8-bit' if actual_state.x_flag else '16-bit'
+                    issues.append(f"X flag: expected {exp}, got {act}")
+
+            if issues:
+                result.diagnostics.append(AnalysisDiagnostic(
+                    severity='error',
+                    message=f"Hook '{hook.name}' entry state mismatch: " + "; ".join(issues),
+                    address=hook.address,
+                    context={'expected': str(expected), 'actual': str(actual_state)}
+                ))
+
+        if hook.expected_exit_state:
+            return_states = tracker.return_states.get(hook.address, [])
+            if not return_states:
+                result.diagnostics.append(AnalysisDiagnostic(
+                    severity='warning',
+                    message=f"Hook '{hook.name}' has no recorded return states for exit check",
+                    address=hook.address,
+                ))
+            else:
+                expected_exit = hook.expected_exit_state
+                for ret_addr, ret_state in return_states:
+                    exit_issues = []
+                    if expected_exit.m_flag is not None and ret_state.m_flag is not None:
+                        if expected_exit.m_flag != ret_state.m_flag:
+                            exp = '8-bit' if expected_exit.m_flag else '16-bit'
+                            act = '8-bit' if ret_state.m_flag else '16-bit'
+                            exit_issues.append(f"M flag: expected {exp}, got {act}")
+
+                    if expected_exit.x_flag is not None and ret_state.x_flag is not None:
+                        if expected_exit.x_flag != ret_state.x_flag:
+                            exp = '8-bit' if expected_exit.x_flag else '16-bit'
+                            act = '8-bit' if ret_state.x_flag else '16-bit'
+                            exit_issues.append(f"X flag: expected {exp}, got {act}")
+
+                    if exit_issues:
+                        result.diagnostics.append(AnalysisDiagnostic(
+                            severity='error',
+                            message=f"Hook '{hook.name}' exit state mismatch at ${ret_addr:06X}: " + "; ".join(exit_issues),
+                            address=ret_addr,
+                            context={'expected': str(expected_exit), 'actual': str(ret_state)}
+                        ))
 
         # Check for unknown states at entry
         if actual_state.m_flag is None:
@@ -1150,6 +1274,7 @@ Examples:
             'cross_refs_found': len(result.cross_refs),
             'addresses_visited': len(result.entry_states),
             'stack_issues': len(result.stack_issues),
+            'return_states': len(result.return_states),
         }
         # Add call graph stats if available
         if result.call_graph:

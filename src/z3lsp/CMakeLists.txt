@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.13)
 
-add_executable(z3lsp main.cc)
+add_executable(z3lsp
+	main.cc
+	logging.cc
+	utils.cc
+	state.cc
+	project_graph.cc
+	lsp_transport.cc
+	mesen_client.cc
+	parser.cc
+)
 
 target_link_libraries(z3lsp PRIVATE z3dk-core)
 

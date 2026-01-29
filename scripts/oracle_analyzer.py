@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,8 @@ from static_analyzer import (
     RegisterState, HookInfo, AnalysisDiagnostic, AnalysisResult,
     StateTracker, parse_sym_file, snes_to_pc, pc_to_snes
 )
+
+LONG_ENTRY_RE = re.compile(r'(FullLongEntry|_LongEntry|_Long)$')
 
 
 # =============================================================================
@@ -46,6 +49,11 @@ KNOWN_HOOKS = [
     # Core system hooks
     (0x008000, "Reset", True, True, "ROM entry point"),
     (0x0080C9, "NMI_Handler", True, True, "NMI entry - must be 8-bit"),
+
+    # Jump table dispatch - REQUIRES X=16-bit for correct PLY of JSL return
+    # PLY with X=8-bit pops only 1 byte instead of 2, corrupting the return address
+    (0x008781, "JumpTableLocal", None, False,
+     "Stack table dispatch - REQUIRES X=16-bit for correct PLY of JSL return"),
 
     # Overworld hooks
     (0x02C0C3, "Overworld_SetCameraBounds", True, True, "Camera calculation"),
@@ -105,10 +113,13 @@ VANILLA_STATE_EXPECTATIONS = {
 class OracleAnalysisResult:
     """Extended analysis result with Oracle-specific info."""
     base_result: AnalysisResult
+    hooks: list[tuple]
     hook_violations: list[dict]
     mx_mismatches: list[dict]
     potential_hangs: list[dict]
     color_issues: list[dict]
+    hook_state_drift: list[dict]
+    hook_abi_issues: list[dict]
 
     def all_diagnostics(self):
         return (
@@ -116,14 +127,59 @@ class OracleAnalysisResult:
             [AnalysisDiagnostic(**h) for h in self.hook_violations] +
             [AnalysisDiagnostic(**m) for m in self.mx_mismatches] +
             [AnalysisDiagnostic(**p) for p in self.potential_hangs] +
-            [AnalysisDiagnostic(**c) for c in self.color_issues]
+            [AnalysisDiagnostic(**c) for c in self.color_issues] +
+            [AnalysisDiagnostic(**d) for d in self.hook_state_drift] +
+            [AnalysisDiagnostic(**a) for a in self.hook_abi_issues]
         )
 
 
-def load_hooks_json(path: Path) -> tuple[list[tuple], dict[int, RegisterState]]:
+def load_hooks_json(path: Path) -> tuple[list[tuple], dict[int, RegisterState], dict[int, RegisterState], dict[int, dict]]:
     """Load hooks from hooks.json file."""
     hooks_list = []
     state_expectations = {}
+    exit_expectations = {}
+    hook_meta = {}
+
+    data_label_re = re.compile(
+        r'^(Pool_|RoomData|RoomDataTiles|RoomDataObjects|OverworldMap|DungeonMap|'
+        r'Map16|Map32|Tile16|Tile32|Gfx|GFX|Pal|Palette|BG|OAM|Msg|Text|Font|'
+        r'Sfx|Sound|Table|Tables|Data|Buffer|Lookup|LUT|Offset|Offsets|Index|'
+        r'Indices|Pointer|Pointers|Ptrs|Ptr|List|Lists|Array|Arrays|Tiles|Tilemap|'
+        r'TileMap|Map|Maps)'
+    )
+    data_label_suffixes = (
+        '_data', '_table', '_tables', '_tiles', '_tilemap', '_map', '_maps',
+        '_gfx', '_pal', '_palettes', '_pointers', '_ptrs', '_ptr', '_lut',
+    )
+
+    def _is_data_label(label: Optional[str]) -> bool:
+        if not label:
+            return False
+        if label.startswith('$'):
+            return False
+        if data_label_re.match(label):
+            return True
+        lower = label.lower()
+        if lower.startswith('oracle_pos') and re.search(r'pos\\d_', lower):
+            return True
+        for suffix in data_label_suffixes:
+            if lower.endswith(suffix):
+                return True
+        return False
+
+    def _coerce_width(value: Optional[object]) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return int(value, 0)
+            except ValueError:
+                return None
+        if isinstance(value, bool):
+            return 8 if value else 16
+        if isinstance(value, (int, float)):
+            return int(value)
+        return None
 
     if not path.exists():
         return hooks_list, state_expectations
@@ -141,16 +197,30 @@ def load_hooks_json(path: Path) -> tuple[list[tuple], dict[int, RegisterState]]:
             addr = int(addr_str)
 
         name = hook.get('name', f'hook_{addr:06X}')
-        exp_m = hook.get('expected_m')
-        exp_x = hook.get('expected_x')
+        exp_m = _coerce_width(hook.get('expected_m'))
+        exp_x = _coerce_width(hook.get('expected_x'))
+        exp_exit_m = _coerce_width(hook.get('expected_exit_m'))
+        exp_exit_x = _coerce_width(hook.get('expected_exit_x'))
         note = hook.get('note', '')
 
         hooks_list.append((addr, name, exp_m == 8 if exp_m else None, exp_x == 8 if exp_x else None, note))
+        hook_meta[addr] = {
+            'kind': hook.get('kind', 'patch'),
+            'module': hook.get('module', ''),
+            'skip_abi': bool(hook.get('skip_abi')) or _is_data_label(name) or _is_data_label(hook.get('target')),
+            'name': name,
+            'abi_class': hook.get('abi_class', ''),
+        }
 
         if exp_m is not None or exp_x is not None:
             state_expectations[addr] = RegisterState(
                 m_flag=exp_m == 8 if exp_m else None,
                 x_flag=exp_x == 8 if exp_x else None
+            )
+        if exp_exit_m is not None or exp_exit_x is not None:
+            exit_expectations[addr] = RegisterState(
+                m_flag=exp_exit_m == 8 if exp_exit_m else None,
+                x_flag=exp_exit_x == 8 if exp_exit_x else None
             )
 
     # Also load critical addresses
@@ -163,16 +233,103 @@ def load_hooks_json(path: Path) -> tuple[list[tuple], dict[int, RegisterState]]:
         else:
             addr = int(addr_str)
 
-        exp_m = addr_info.get('expected_m')
-        exp_x = addr_info.get('expected_x')
+        exp_m = _coerce_width(addr_info.get('expected_m'))
+        exp_x = _coerce_width(addr_info.get('expected_x'))
+        exp_exit_m = _coerce_width(addr_info.get('expected_exit_m'))
+        exp_exit_x = _coerce_width(addr_info.get('expected_exit_x'))
 
         if exp_m is not None or exp_x is not None:
             state_expectations[addr] = RegisterState(
                 m_flag=exp_m == 8 if exp_m else None,
                 x_flag=exp_x == 8 if exp_x else None
             )
+        if exp_exit_m is not None or exp_exit_x is not None:
+            exit_expectations[addr] = RegisterState(
+                m_flag=exp_exit_m == 8 if exp_exit_m else None,
+                x_flag=exp_exit_x == 8 if exp_exit_x else None
+            )
 
-    return hooks_list, state_expectations
+    return hooks_list, state_expectations, exit_expectations, hook_meta
+
+
+def _read_vector(rom_data: bytes, vector_addr: int, mapper: str = 'lorom') -> Optional[int]:
+    """Read a 16-bit vector and return a SNES address in bank $00."""
+    pc = snes_to_pc(vector_addr, mapper)
+    if pc < 0 or pc + 1 >= len(rom_data):
+        return None
+    lo = rom_data[pc]
+    hi = rom_data[pc + 1]
+    target = lo | (hi << 8)
+    if target == 0x0000:
+        return None
+    return target  # Bank $00
+
+
+def analyze_from_vectors(rom_data: bytes, labels: dict[int, str], mapper: str = 'lorom') -> StateTracker:
+    """Analyze ROM starting from reset/NMI/IRQ vectors (bank $00)."""
+    tracker = StateTracker(rom_data, mapper)
+    tracker.labels = labels
+
+    # Emulation mode vectors in bank $00
+    vector_addrs = (0x00FFFC, 0x00FFFA, 0x00FFEE)  # RESET, NMI, IRQ/BRK
+    entry_points = []
+    for vec in vector_addrs:
+        target = _read_vector(rom_data, vec, mapper)
+        if target is not None:
+            entry_points.append(target)
+
+    # Fallback if vectors are missing/unreadable
+    if not entry_points:
+        entry_points = [0x008000, 0x0080C9]  # Reset, NMI (ALTTP convention)
+
+    for entry in entry_points:
+        tracker.analyze_from(entry, RegisterState(m_flag=True, x_flag=True))
+
+    tracker.finalize_call_graph()
+    return tracker
+
+
+def compare_hook_entry_states(
+    patched_rom: bytes,
+    baseline_rom: bytes,
+    hooks: list[tuple],
+    labels: dict[int, str],
+    mapper: str = 'lorom'
+) -> list[dict]:
+    """Compare entry state at hook addresses between baseline and patched ROMs."""
+    drift = []
+    base_tracker = analyze_from_vectors(baseline_rom, labels, mapper)
+    patch_tracker = analyze_from_vectors(patched_rom, labels, mapper)
+
+    for addr, name, _exp_m, _exp_x, _note in hooks:
+        base_state = base_tracker.visited.get(addr)
+        patch_state = patch_tracker.visited.get(addr)
+
+        if base_state is None or patch_state is None:
+            continue
+
+        issues = []
+        if base_state.m_flag is not None and patch_state.m_flag is not None:
+            if base_state.m_flag != patch_state.m_flag:
+                issues.append("M flag drift")
+
+        if base_state.x_flag is not None and patch_state.x_flag is not None:
+            if base_state.x_flag != patch_state.x_flag:
+                issues.append("X flag drift")
+
+        if issues:
+            label = labels.get(addr, f"${addr:06X}")
+            drift.append({
+                'severity': 'warning',
+                'message': f"Hook state drift at {label} ({name}): " + ", ".join(issues),
+                'address': addr,
+                'context': {
+                    'baseline_state': str(base_state),
+                    'patched_state': str(patch_state),
+                }
+            })
+
+    return drift
 
 
 def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_path: Optional[Path] = None) -> OracleAnalysisResult:
@@ -189,12 +346,16 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
     # Load hooks from JSON if available, otherwise use built-in
     hooks_to_analyze = KNOWN_HOOKS
     state_expectations = dict(VANILLA_STATE_EXPECTATIONS)
+    exit_expectations: dict[int, RegisterState] = {}
+    hook_meta: dict[int, dict] = {}
 
     if hooks_path and hooks_path.exists():
-        json_hooks, json_expectations = load_hooks_json(hooks_path)
+        json_hooks, json_expectations, json_exit_expectations, json_meta = load_hooks_json(hooks_path)
         if json_hooks:
             hooks_to_analyze = json_hooks
         state_expectations.update(json_expectations)
+        exit_expectations.update(json_exit_expectations)
+        hook_meta.update(json_meta)
 
     # Create tracker
     tracker = StateTracker(rom_data, 'lorom')
@@ -214,28 +375,50 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
         cross_refs=tracker.cross_refs,
         labels=labels,
         entry_states=tracker.visited,
+        return_states=tracker.return_states,
     )
 
     # Oracle-specific checks
-    hook_violations = check_hook_states(tracker, labels, state_expectations)
-    mx_mismatches = find_mx_mismatches(rom_data, tracker, labels)
+    hook_violations = check_hook_states(tracker, labels, state_expectations, hook_meta)
+    mx_mismatches = find_mx_mismatches(rom_data, tracker, labels, hook_meta)
     potential_hangs = find_hang_points(rom_data, tracker, labels)
     color_issues = find_color_issues(rom_data, tracker, labels)
+    hook_state_drift = []
+    hook_abi_issues = check_hook_abi(tracker, labels, hooks_to_analyze, exit_expectations, hook_meta)
 
     return OracleAnalysisResult(
         base_result=base_result,
+        hooks=hooks_to_analyze,
         hook_violations=hook_violations,
         mx_mismatches=mx_mismatches,
         potential_hangs=potential_hangs,
         color_issues=color_issues,
+        hook_state_drift=hook_state_drift,
+        hook_abi_issues=hook_abi_issues,
     )
 
 
-def check_hook_states(tracker: StateTracker, labels: dict[int, str], state_expectations: dict[int, RegisterState]) -> list[dict]:
+def check_hook_states(
+    tracker: StateTracker,
+    labels: dict[int, str],
+    state_expectations: dict[int, RegisterState],
+    hook_meta: dict[int, dict] | None = None,
+) -> list[dict]:
     """Check that hooks are entered with correct state."""
     violations = []
 
     for addr, expected_state in state_expectations.items():
+        meta = (hook_meta or {}).get(addr, {})
+        if meta.get('skip_abi'):
+            continue
+        # Skip data/patch hooks unless skip_abi is explicitly False
+        if meta.get('kind') in ('data', 'jmp', 'jml'):
+            continue
+        if meta.get('kind') == 'patch' and meta.get('skip_abi') is not False:
+            continue
+        name = meta.get('name', '')
+        if name.startswith('hook_') or name.startswith('.') or name.startswith('$'):
+            continue
         if addr not in tracker.visited:
             continue
 
@@ -269,9 +452,140 @@ def check_hook_states(tracker: StateTracker, labels: dict[int, str], state_expec
     return violations
 
 
-def find_mx_mismatches(rom_data: bytes, tracker: StateTracker, labels: dict[int, str]) -> list[dict]:
+def check_hook_abi(
+    tracker: StateTracker,
+    labels: dict[int, str],
+    hooks: list[tuple],
+    exit_expectations: dict[int, RegisterState],
+    hook_meta: dict[int, dict] | None = None,
+) -> list[dict]:
+    """Validate hook ABI expectations at return points."""
+    issues = []
+
+    for addr, name, _exp_m, _exp_x, _note in hooks:
+        meta = (hook_meta or {}).get(addr, {})
+        if meta.get('skip_abi') or meta.get('kind') in ('data', 'patch', 'jmp', 'jml'):
+            continue
+        name = meta.get('name', '')
+        if name.startswith('hook_') or name.startswith('.') or name.startswith('$'):
+            continue
+        label = labels.get(addr, f"${addr:06X}")
+        return_states = tracker.return_states.get(addr, [])
+        if not return_states:
+            issues.append({
+                'severity': 'warning',
+                'message': f"Hook '{name}' has no recorded return states (ABI exit not verified)",
+                'address': addr,
+                'context': {'hook': label},
+            })
+            continue
+
+        expected_exit = exit_expectations.get(addr)
+
+        for ret_addr, ret_state in return_states:
+            if ret_state.m_flag is None:
+                issues.append({
+                    'severity': 'warning',
+                    'message': f"Hook '{name}' exit M flag unknown at ${ret_addr:06X}",
+                    'address': ret_addr,
+                    'context': {'hook': label, 'state': str(ret_state)},
+                })
+            if ret_state.x_flag is None:
+                issues.append({
+                    'severity': 'warning',
+                    'message': f"Hook '{name}' exit X flag unknown at ${ret_addr:06X}",
+                    'address': ret_addr,
+                    'context': {'hook': label, 'state': str(ret_state)},
+                })
+
+            if expected_exit:
+                exit_issues = []
+                if expected_exit.m_flag is not None and ret_state.m_flag is not None:
+                    if expected_exit.m_flag != ret_state.m_flag:
+                        exp = '8-bit' if expected_exit.m_flag else '16-bit'
+                        act = '8-bit' if ret_state.m_flag else '16-bit'
+                        exit_issues.append(f"M flag: expected {exp}, got {act}")
+                if expected_exit.x_flag is not None and ret_state.x_flag is not None:
+                    if expected_exit.x_flag != ret_state.x_flag:
+                        exp = '8-bit' if expected_exit.x_flag else '16-bit'
+                        act = '8-bit' if ret_state.x_flag else '16-bit'
+                        exit_issues.append(f"X flag: expected {exp}, got {act}")
+                if exit_issues:
+                    issues.append({
+                        'severity': 'error',
+                        'message': f"Hook '{name}' exit state mismatch at ${ret_addr:06X}: " + "; ".join(exit_issues),
+                        'address': ret_addr,
+                        'context': {
+                            'hook': label,
+                            'expected': str(expected_exit),
+                            'actual': str(ret_state),
+                        }
+                    })
+
+            # ABI push/pull pairing checks for DB/DP/P
+            local_ops = [op for op in ret_state.stack_ops
+                         if op.opcode not in ('JSR', 'JSL', 'RTS', 'RTL', 'RTI')]
+            if local_ops:
+                counts = {}
+                for op in local_ops:
+                    counts[op.opcode] = counts.get(op.opcode, 0) + 1
+                pairs = [
+                    ("PHB", "PLB"),
+                    ("PHD", "PLD"),
+                    ("PHP", "PLP"),
+                ]
+                for push, pull in pairs:
+                    pushes = counts.get(push, 0)
+                    pulls = counts.get(pull, 0)
+                    if pushes != pulls:
+                        issues.append({
+                            'severity': 'warning',
+                            'message': (
+                                f"Hook '{name}' exit {push}/{pull} imbalance at ${ret_addr:06X}: "
+                                f"pushes={pushes}, pulls={pulls}"
+                            ),
+                            'address': ret_addr,
+                            'context': {'hook': label, 'pair': f"{push}/{pull}"},
+                        })
+
+    return issues
+
+
+def find_mx_mismatches(
+    rom_data: bytes,
+    tracker: StateTracker,
+    labels: dict[int, str],
+    hook_meta: dict[int, dict] | None = None,
+) -> list[dict]:
     """Find potential M/X flag mismatches at JSL call sites."""
     mismatches = []
+    hook_meta = hook_meta or {}
+    data_label_re = re.compile(
+        r'^(Pool_|RoomData|RoomDataTiles|RoomDataObjects|OverworldMap|DungeonMap|'
+        r'Map16|Map32|Tile16|Tile32|Gfx|GFX|Pal|Palette|BG|OAM|Msg|Text|Font|'
+        r'Sfx|Sound|Table|Tables|Data|Buffer|Lookup|LUT|Offset|Offsets|Index|'
+        r'Indices|Pointer|Pointers|Ptrs|Ptr|List|Lists|Array|Arrays|Tiles|Tilemap|'
+        r'TileMap|Map|Maps)'
+    )
+    data_label_suffixes = (
+        '_data', '_table', '_tables', '_tiles', '_tilemap', '_map', '_maps',
+        '_gfx', '_pal', '_palettes', '_pointers', '_ptrs', '_ptr', '_lut',
+    )
+
+    def _is_data_label(label: Optional[str]) -> bool:
+        if not label:
+            return False
+        if label.startswith('$'):
+            return False
+        if data_label_re.match(label):
+            return True
+        lower = label.lower()
+        if lower.startswith('oracle_pos') and re.search(r'pos\\d_', lower):
+            return True
+        for suffix in data_label_suffixes:
+            if lower.endswith(suffix):
+                return True
+        return False
 
     # Scan for JSL (0x22) instructions
     for pc in range(len(rom_data) - 3):
@@ -281,12 +595,25 @@ def find_mx_mismatches(rom_data: bytes, tracker: StateTracker, labels: dict[int,
         src_addr = pc_to_snes(pc, 'lorom')
         target = rom_data[pc + 1] | (rom_data[pc + 2] << 8) | (rom_data[pc + 3] << 16)
 
+        # Skip non-ROM targets and data hooks
+        if snes_to_pc(target, 'lorom') < 0:
+            continue
+        meta = hook_meta.get(target, {})
+        if meta.get('skip_abi') or meta.get('kind') == 'data' or meta.get('abi_class') == 'long_entry':
+            continue
+
         # Check if we have state info for both caller and callee
         if src_addr not in tracker.visited or target not in tracker.visited:
             continue
 
         caller_state = tracker.visited[src_addr]
         callee_state = tracker.visited[target]
+
+        tgt_label = labels.get(target, f"${target:06X}")
+        if _is_data_label(tgt_label):
+            continue
+        if LONG_ENTRY_RE.search(tgt_label):
+            continue
 
         # Check for mismatches
         issues = []
@@ -300,7 +627,6 @@ def find_mx_mismatches(rom_data: bytes, tracker: StateTracker, labels: dict[int,
 
         if issues:
             src_label = labels.get(src_addr, f"${src_addr:06X}")
-            tgt_label = labels.get(target, f"${target:06X}")
             mismatches.append({
                 'severity': 'warning',
                 'message': f"JSL from {src_label} to {tgt_label}: " + ", ".join(issues),
@@ -468,6 +794,8 @@ def main():
                        help=f'Hooks manifest JSON (default: {DEFAULT_HOOKS})')
     parser.add_argument('--baseline', type=Path,
                        help='Baseline ROM for change detection')
+    parser.add_argument('--compare-hooks', action='store_true',
+                       help='Compare hook entry states against baseline ROM')
     parser.add_argument('--check-hooks', action='store_true',
                        help='Check hook entry states')
     parser.add_argument('--find-mx', action='store_true',
@@ -476,6 +804,8 @@ def main():
                        help='Find potential hang points')
     parser.add_argument('--find-colors', action='store_true',
                        help='Find color/palette issues')
+    parser.add_argument('--check-abi', action='store_true',
+                       help='Check hook ABI exit state and push/pull balance')
     parser.add_argument('--json', action='store_true',
                        help='Output as JSON')
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -498,22 +828,46 @@ def main():
     # Collect diagnostics based on filters
     all_diags = []
 
-    if args.check_hooks or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors]):
+    if args.check_hooks or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
         all_diags.extend(result.hook_violations)
 
-    if args.find_mx or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors]):
+    if args.find_mx or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
         all_diags.extend(result.mx_mismatches)
 
-    if args.find_hangs or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors]):
+    if args.find_hangs or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
         all_diags.extend(result.potential_hangs)
 
-    if args.find_colors or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors]):
+    if args.find_colors or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
         all_diags.extend(result.color_issues)
+
+    if args.check_abi or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
+        all_diags.extend(result.hook_abi_issues)
 
     # Add change detection if baseline provided
     if args.baseline:
         changes = scan_for_recent_changes(args.rom, args.baseline)
         all_diags.extend(changes)
+
+        if args.compare_hooks:
+            try:
+                patched_rom = args.rom.read_bytes()
+                baseline_rom = args.baseline.read_bytes()
+                # Reuse hooks list from analysis (addresses only)
+                hooks_for_compare = result.hooks or KNOWN_HOOKS
+                hook_drift = compare_hook_entry_states(
+                    patched_rom,
+                    baseline_rom,
+                    hooks_for_compare,
+                    result.base_result.labels,
+                )
+                result.hook_state_drift = hook_drift
+                all_diags.extend(hook_drift)
+            except Exception as exc:
+                all_diags.append({
+                    'severity': 'warning',
+                    'message': f"Hook state drift check failed: {exc}",
+                    'address': 0,
+                })
 
     # Output
     if args.json:
@@ -525,6 +879,8 @@ def main():
                 'mx_mismatches': len(result.mx_mismatches),
                 'potential_hangs': len(result.potential_hangs),
                 'color_issues': len(result.color_issues),
+                'hook_state_drift': len(result.hook_state_drift),
+                'hook_abi_issues': len(result.hook_abi_issues),
             }
         }
         print(json.dumps(output, indent=2))
@@ -532,7 +888,7 @@ def main():
         print(f"\nOracle of Secrets Static Analysis")
         print("=" * 60)
         print(f"ROM: {args.rom}")
-        print(f"Hooks checked: {len(KNOWN_HOOKS)}")
+        print(f"Hooks checked: {len(result.hooks) or len(KNOWN_HOOKS)}")
         print()
 
         # Group by severity
@@ -576,6 +932,10 @@ def main():
         # Summary
         print("=" * 60)
         print(f"Total: {len(errors)} errors, {len(warnings)} warnings, {len(infos)} info")
+        if args.compare_hooks and args.baseline:
+            print(f"Hook state drift warnings: {len(result.hook_state_drift)}")
+        if args.check_abi:
+            print(f"Hook ABI issues: {len(result.hook_abi_issues)}")
 
         if errors:
             return 1

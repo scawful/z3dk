@@ -53,5 +53,23 @@ Hook entry fields:
 - `target` (string, optional): Target routine/label name.
 - `source` (string, optional): Source file and line for the hook.
 - `note` (string, optional): Extra context for tooling.
+- `expected_m` (number, optional): Expected M flag width at hook entry (8 or 16).
+- `expected_x` (number, optional): Expected X flag width at hook entry (8 or 16).
+- `expected_exit_m` (number, optional): Expected M width on routine exit (8 or 16).
+- `expected_exit_x` (number, optional): Expected X width on routine exit (8 or 16).
+- `module` (string, optional): High-level module name (derived from file path).
+- `skip_abi` (bool, optional): Mark entry as data/placeholder or non-returning hook (e.g., `data`, `jmp`, `jml`, or anonymous `hook_XXXXXX`) to skip ABI checks.
+- `abi_class` (string, optional): ABI convention hint (e.g., `long_entry` to signal the callee normalizes M/X internally).
+
+## Annotations (Oracle generator)
+The Oracle hooks generator can read inline annotations:
+- `; @abi long_entry`
+- `; @abi m8x8` / `; @abi m16x8` / `; @abi m8x16` / `; @abi m16x16`
+- `; @no_return`
+
+These are emitted into `hooks.json` as `abi_class`, `expected_m`, `expected_x`, or `skip_abi`.
+
+Tools may use `expected_m` / `expected_x` to warn about register-width drift
+when hooks return to vanilla code paths.
 
 Tools should ignore unknown fields to allow extension.

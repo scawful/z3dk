@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <cstdlib>
 #include <cstring>
 #include "logging.h"
 #include "utils.h"
@@ -115,6 +116,14 @@ std::optional<json> MesenClient::SendCommand(const json& cmd) {
 }
 
 std::string MesenClient::FindLatestSocket() {
+  const char* env_path = std::getenv("MESEN2_SOCKET_PATH");
+  if (env_path && env_path[0] != '\0') {
+    struct stat st;
+    if (stat(env_path, &st) == 0 && S_ISSOCK(st.st_mode)) {
+      return std::string(env_path);
+    }
+  }
+
   DIR* dir = opendir("/tmp");
   if (!dir) return "";
 

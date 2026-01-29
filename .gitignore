@@ -75,6 +75,9 @@ node_modules/
 # macOS
 .DS_Store
 
+# VS Code workspace files (user-specific)
+*.code-workspace
+
 # Build directories
 build-*/
 extensions/vscode-z3dk/dist/

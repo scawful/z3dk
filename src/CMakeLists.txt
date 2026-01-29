@@ -17,7 +17,7 @@ add_subdirectory(z3lsp)
 
 add_subdirectory(z3disasm)
 
-add_subdirectory(tests)
+add_subdirectory(../tests/asar_cpp tests/asar_cpp)
 
 if(TARGET z3asm AND TARGET z3dk-core)
 	target_link_libraries(z3asm PRIVATE z3dk-core)

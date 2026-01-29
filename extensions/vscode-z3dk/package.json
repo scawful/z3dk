@@ -53,7 +53,8 @@
     "onCommand:z3dk.lspStatusOff",
     "onCommand:z3dk.refresh",
     "onCommand:z3dk.refreshDashboard",
-    "onLanguage:65816-assembly"
+    "onLanguage:65816-assembly",
+    "onLanguage:assembly"
   ],
   "main": "extension.js",
   "contributes": {

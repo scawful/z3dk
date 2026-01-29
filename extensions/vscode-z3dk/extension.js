@@ -1442,6 +1442,10 @@ function resolveMesenExecutable(config) {
     path.join('build', 'Mesen2-OOS.app'),
     path.join('build', 'Mesen.app')
   ];
+  // mesen2-oos makefile publish layout: bin/<platform>/Release/<platform>/publish/
+  const platform = process.platform === 'darwin' ? (process.arch === 'arm64' ? 'osx-arm64' : 'osx-x64') : (process.platform === 'win32' ? 'win-x64' : 'linux-x64');
+  candidates.push(path.join('bin', platform, 'Release', platform, 'publish', 'Mesen2 OOS.app'));
+  candidates.push(path.join('bin', platform, 'Release', platform, 'publish', 'Mesen.app'));
   for (const candidate of candidates) {
     const fullPath = path.join(mesenRoot, candidate);
     if (fs.existsSync(fullPath)) {
@@ -3644,6 +3648,83 @@ function activate(context) {
   romMapProvider = new Z3dkRomMapProvider(context);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('z3dk.romMap', romMapProvider)
+  );
+
+  // Asar: fold by global labels (until next global label, not dot-sublabels), comment sections, and indent blocks.
+  // Not limited to brackets; works for .asm/.inc regardless of editor language id.
+  function getIndent(line) {
+    const m = line.match(/^(\s*)/);
+    return m ? m[1].length : 0;
+  }
+  const asarFoldingProvider = {
+    provideFoldingRanges(document) {
+      const ranges = [];
+      const lineCount = document.lineCount;
+      // Global label only: optional space, then letter/underscore (not dot), then name and colon
+      const globalLabelRe = /^\s*[A-Za-z_][A-Za-z0-9_.]*\s*:/;
+      const sectionCommentRe = /^\s*;\s*[-=]+\s*$/; // ; ==== or ; ----
+
+      let globalLabelLine = -1;
+      let commentStart = -1;
+      for (let i = 0; i < lineCount; i += 1) {
+        const line = document.lineAt(i).text;
+        const isGlobalLabel = globalLabelRe.test(line);
+        const isSectionComment = sectionCommentRe.test(line);
+
+        if (isSectionComment) {
+          if (commentStart >= 0 && i > commentStart + 1) {
+            ranges.push(new vscode.FoldingRange(commentStart, i - 1, vscode.FoldingRangeKind.Region));
+          }
+          commentStart = i;
+        }
+
+        if (isGlobalLabel) {
+          if (globalLabelLine >= 0 && i > globalLabelLine + 1) {
+            ranges.push(new vscode.FoldingRange(globalLabelLine, i - 1, vscode.FoldingRangeKind.Region));
+          }
+          globalLabelLine = i;
+        }
+      }
+      if (globalLabelLine >= 0 && lineCount > globalLabelLine + 1) {
+        ranges.push(new vscode.FoldingRange(globalLabelLine, lineCount - 1, vscode.FoldingRangeKind.Region));
+      }
+      if (commentStart >= 0 && lineCount > commentStart + 1) {
+        ranges.push(new vscode.FoldingRange(commentStart, lineCount - 1, vscode.FoldingRangeKind.Region));
+      }
+
+      // Indent-based folding for branching/conditional sections
+      const indents = [];
+      for (let i = 0; i < lineCount; i += 1) {
+        indents.push(getIndent(document.lineAt(i).text));
+      }
+      for (let i = 0; i < lineCount; i += 1) {
+        const L = indents[i];
+        if (L <= 0) continue;
+        let j = i;
+        while (j + 1 < lineCount && indents[j + 1] >= L) j += 1;
+        if (j > i) {
+          ranges.push(new vscode.FoldingRange(i, j, vscode.FoldingRangeKind.Region));
+        }
+      }
+      return ranges;
+    }
+  };
+  const asarFoldingSelectors = [
+    { language: 'asar' },
+    { language: 'asm' },
+    { language: 'assembly' },
+    { language: '65816-assembly' },
+    { language: '65816' },
+    { language: '65c816' },
+    { language: 'wla-65816' },
+    { language: 'snes-asm' },
+    { pattern: '**/*.asm' },
+    { pattern: '**/*.inc' },
+    { pattern: '**/*.s' },
+    { pattern: '**/*.a65' }
+  ];
+  context.subscriptions.push(
+    vscode.languages.registerFoldingRangeProvider(asarFoldingSelectors, asarFoldingProvider)
   );
 
   context.subscriptions.push(vscode.commands.registerCommand('z3dk.openRomMap', () => {

@@ -76,8 +76,10 @@ cd ~/src/hobby/z3dk/extensions/vscode-z3dk
 - `z3dk.oracleRoot`: path to oracle-of-secrets repo.
 - `z3dk.yazeRoot`: path to yaze repo.
 - `z3dk.mesenRoot`: path to mesen2-oos repo.
-- `z3dk.mesenPath`: path to the Mesen2-OOS executable or .app bundle.
+- `z3dk.mesenPath`: path to the Mesen2-OOS executable or .app bundle (overrides auto-discovery).
 - `z3dk.mesenArgs`: launch arguments for Mesen2-OOS (supports `${rom}` + `${symbols}`).
+
+Mesen2 socket: when multiple Mesen2 instances exist, set `MESEN2_SOCKET_PATH` so z3lsp (and other tools) connect to the intended instance. Built-from-source mesen2-oos is auto-discovered under `mesenRoot/bin/<platform>/Release/<platform>/publish/` (e.g. `Mesen2 OOS.app`); set `z3dk.mesenPath` to override.
 - `z3dk.yazeLaunchArgs`: launch arguments for yaze (supports `${rom}` + `${symbols}`).
 - `z3dk.usdasmRoot`: path to the USDASM disassembly.
 - `z3dk.usdasmGlob`: glob for USDASM label search.

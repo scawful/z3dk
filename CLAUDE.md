@@ -50,7 +50,7 @@ Located in `scripts/`, these are used by oracle-of-secrets for build-time valida
 ### Key Concepts
 
 - **StateTracker**: Traces 65816 control flow tracking M/X flag state through SEP/REP/PHP/PLP
-- **KNOWN_HOOKS**: List of routines with expected register widths at entry (e.g., JumpTableLocal requires X=16-bit)
+- **KNOWN_HOOKS**: List of routines with expected register widths at entry (e.g., JumpTableLocal at $008781 requires 8-bit Y; 16-bit Y causes stack underflow)
 - **find_mx_mismatches**: Scans JSL call sites for M/X flag mismatches between caller and callee
 - **Analysis order matters**: When using `find_mx_mismatches`, analyze target hooks BEFORE callers so expected states are recorded before caller traces overwrite them
 

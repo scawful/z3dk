@@ -19,7 +19,7 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -52,8 +52,8 @@ KNOWN_HOOKS = [
 
     # Jump table dispatch - REQUIRES X=16-bit for correct PLY of JSL return
     # PLY with X=8-bit pops only 1 byte instead of 2, corrupting the return address
-    (0x008781, "JumpTableLocal", None, False,
-     "Stack table dispatch - REQUIRES X=16-bit for correct PLY of JSL return"),
+    (0x008781, "JumpTableLocal", None, True,
+     "Stack table dispatch - REQUIRES X=8-bit for correct PLY/PLA stack math"),
 
     # Overworld hooks
     (0x02C0C3, "Overworld_SetCameraBounds", True, True, "Camera calculation"),
@@ -120,6 +120,7 @@ class OracleAnalysisResult:
     color_issues: list[dict]
     hook_state_drift: list[dict]
     hook_abi_issues: list[dict]
+    width_stack_imbalances: list[dict] = field(default_factory=list)
 
     def all_diagnostics(self):
         return (
@@ -129,7 +130,8 @@ class OracleAnalysisResult:
             [AnalysisDiagnostic(**p) for p in self.potential_hangs] +
             [AnalysisDiagnostic(**c) for c in self.color_issues] +
             [AnalysisDiagnostic(**d) for d in self.hook_state_drift] +
-            [AnalysisDiagnostic(**a) for a in self.hook_abi_issues]
+            [AnalysisDiagnostic(**a) for a in self.hook_abi_issues] +
+            [AnalysisDiagnostic(**w) for w in self.width_stack_imbalances]
         )
 
 
@@ -385,6 +387,7 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
     color_issues = find_color_issues(rom_data, tracker, labels)
     hook_state_drift = []
     hook_abi_issues = check_hook_abi(tracker, labels, hooks_to_analyze, exit_expectations, hook_meta)
+    width_stack_imbalances = find_width_dependent_stack_imbalance(rom_data, tracker, labels, hook_meta)
 
     return OracleAnalysisResult(
         base_result=base_result,
@@ -395,6 +398,7 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
         color_issues=color_issues,
         hook_state_drift=hook_state_drift,
         hook_abi_issues=hook_abi_issues,
+        width_stack_imbalances=width_stack_imbalances,
     )
 
 
@@ -419,12 +423,49 @@ def check_hook_states(
         name = meta.get('name', '')
         if name.startswith('hook_') or name.startswith('.') or name.startswith('$'):
             continue
+        label = labels.get(addr, f"${addr:06X}")
+
+        # Prefer validating actual call sites into the hook when available.
+        call_refs = [r for r in tracker.cross_refs
+                     if r.to_addr == addr and r.kind in ('jsl', 'jsr')]
+        if call_refs:
+            for ref in call_refs:
+                caller_state = tracker.visited.get(ref.from_addr)
+                if not caller_state:
+                    continue
+                issues = []
+                if expected_state.m_flag is not None and caller_state.m_flag is not None:
+                    if expected_state.m_flag != caller_state.m_flag:
+                        exp = '8-bit' if expected_state.m_flag else '16-bit'
+                        act = '8-bit' if caller_state.m_flag else '16-bit'
+                        issues.append(f"M flag: expected {exp}, got {act}")
+
+                if expected_state.x_flag is not None and caller_state.x_flag is not None:
+                    if expected_state.x_flag != caller_state.x_flag:
+                        exp = '8-bit' if expected_state.x_flag else '16-bit'
+                        act = '8-bit' if caller_state.x_flag else '16-bit'
+                        issues.append(f"X flag: expected {exp}, got {act}")
+
+                if issues:
+                    src_label = labels.get(ref.from_addr, f"${ref.from_addr:06X}")
+                    violations.append({
+                        'severity': 'error',
+                        'message': f"Hook entry state mismatch at {label} (call from {src_label}): "
+                                   + "; ".join(issues),
+                        'address': ref.from_addr,
+                        'context': {
+                            'hook': label,
+                            'expected': str(expected_state),
+                            'actual': str(caller_state),
+                        }
+                    })
+            continue
+
+        # Fallback: use the tracked state at the hook entry.
         if addr not in tracker.visited:
             continue
 
         actual_state = tracker.visited[addr]
-        label = labels.get(addr, f"${addr:06X}")
-
         issues = []
         if expected_state.m_flag is not None and actual_state.m_flag is not None:
             if expected_state.m_flag != actual_state.m_flag:
@@ -730,6 +771,149 @@ def find_color_issues(rom_data: bytes, tracker: StateTracker, labels: dict[int, 
     return issues
 
 
+def find_width_dependent_stack_imbalance(
+    rom_data: bytes,
+    tracker: StateTracker,
+    labels: dict[int, str],
+    hook_meta: dict[int, dict] | None = None,
+) -> list[dict]:
+    """Find push/pull pairs where M/X width differs between the push and pull.
+
+    This catches the critical bug pattern where:
+      - PHY pushes 2 bytes (X=16-bit) but PLY pulls 1 byte (X=8-bit), or vice versa
+      - PHA pushes 2 bytes (M=16-bit) but PLA pulls 1 byte (M=8-bit), or vice versa
+
+    These cause stack misalignment that corrupts return addresses.
+
+    Also checks for TCS (opcode 0x1B) reached with A in 16-bit mode holding
+    a value outside the valid stack page, which would redirect SP.
+    """
+    issues = []
+
+    # Width-dependent push/pull pairs: (push_opcode, pull_opcode, flag)
+    # flag = 'm' means width depends on M flag, 'x' means X flag
+    width_pairs = [
+        (0x48, 0x68, 'm', 'PHA', 'PLA'),  # A
+        (0xDA, 0xFA, 'x', 'PHX', 'PLX'),  # X
+        (0x5A, 0x7A, 'x', 'PHY', 'PLY'),  # Y
+    ]
+
+    # Collect all visited addresses with their states, keyed by routine
+    # We check within each routine's return paths
+    for routine_start, return_list in tracker.return_states.items():
+        for ret_addr, ret_state in return_list:
+            if not ret_state.stack_ops:
+                continue
+
+            # Walk through stack ops looking for width-dependent push/pull pairs
+            # where the M/X flag differs between the push and the corresponding pull
+            push_stack: dict[str, list[tuple]] = {}  # opcode -> [(addr, m_flag, x_flag)]
+
+            for op in ret_state.stack_ops:
+                if op.opcode in ('JSR', 'JSL', 'RTS', 'RTL', 'RTI'):
+                    continue
+
+                # Check if this is a width-dependent push
+                for push_op, pull_op, flag, push_name, pull_name in width_pairs:
+                    if op.opcode == push_name:
+                        # Record the state at the push
+                        push_state = tracker.visited.get(op.addr)
+                        if push_state:
+                            if push_name not in push_stack:
+                                push_stack[push_name] = []
+                            push_stack[push_name].append((
+                                op.addr,
+                                push_state.m_flag,
+                                push_state.x_flag,
+                            ))
+
+                    elif op.opcode == pull_name:
+                        # Match with last push of same type
+                        if push_name in push_stack and push_stack[push_name]:
+                            push_addr, push_m, push_x = push_stack[push_name].pop()
+                            pull_state = tracker.visited.get(op.addr)
+                            if not pull_state:
+                                continue
+
+                            # Check if the relevant flag differs
+                            if flag == 'm':
+                                push_width = push_m
+                                pull_width = pull_state.m_flag
+                            else:
+                                push_width = push_x
+                                pull_width = pull_state.x_flag
+
+                            if (push_width is not None and pull_width is not None
+                                    and push_width != pull_width):
+                                push_label = labels.get(push_addr, f"${push_addr:06X}")
+                                pull_label = labels.get(op.addr, f"${op.addr:06X}")
+                                routine_label = labels.get(routine_start, f"${routine_start:06X}")
+
+                                push_w = '8-bit' if push_width else '16-bit'
+                                pull_w = '8-bit' if pull_width else '16-bit'
+                                flag_name = 'M' if flag == 'm' else 'X'
+                                push_bytes = 1 if push_width else 2
+                                pull_bytes = 1 if pull_width else 2
+
+                                issues.append({
+                                    'severity': 'error',
+                                    'message': (
+                                        f"Width-dependent stack imbalance in {routine_label}: "
+                                        f"{push_name} at {push_label} ({flag_name}={push_w}, {push_bytes}B) "
+                                        f"vs {pull_name} at {pull_label} ({flag_name}={pull_w}, {pull_bytes}B) "
+                                        f"— stack shift of {abs(push_bytes - pull_bytes)} byte(s)"
+                                    ),
+                                    'address': push_addr,
+                                    'context': {
+                                        'routine': routine_label,
+                                        'push_addr': f"${push_addr:06X}",
+                                        'pull_addr': f"${op.addr:06X}",
+                                        'push_width': push_w,
+                                        'pull_width': pull_w,
+                                        'flag': flag_name,
+                                        'stack_shift': abs(push_bytes - pull_bytes),
+                                    }
+                                })
+
+    # Check TCS sites - find TCS (0x1B) in visited code with A potentially corrupt
+    for pc in range(len(rom_data)):
+        if rom_data[pc] != 0x1B:  # TCS
+            continue
+        snes_addr = pc_to_snes(pc, 'lorom')
+        state = tracker.visited.get(snes_addr)
+        if not state:
+            continue
+
+        # TCS in 16-bit M mode means A is 16-bit, so the full 16-bit A is loaded to SP
+        # This is expected for init code. But if we reach TCS via an Oracle hook path
+        # where A might hold garbage, SP gets corrupted.
+        if state.m_flag is False:  # 16-bit A
+            label = labels.get(snes_addr, f"${snes_addr:06X}")
+            # Check if this TCS loads from a known-safe source
+            # Safe: LDA #$01FF : TCS (the init pattern)
+            if pc >= 3 and rom_data[pc-3] == 0xA9:
+                val = rom_data[pc-2] | (rom_data[pc-1] << 8)
+                if val == 0x01FF:
+                    continue  # Safe - init code
+            # Dynamic TCS from memory - flag as potential risk
+            if pc >= 3 and rom_data[pc-3] == 0xAD:
+                mem_addr = rom_data[pc-2] | (rom_data[pc-1] << 8)
+                issues.append({
+                    'severity': 'warning',
+                    'message': (
+                        f"Dynamic TCS at {label}: SP loaded from ${mem_addr:04X} "
+                        f"with A in 16-bit mode — verify ${mem_addr:04X} is never corrupted"
+                    ),
+                    'address': snes_addr,
+                    'context': {
+                        'source_addr': f"${mem_addr:04X}",
+                        'state': str(state),
+                    }
+                })
+
+    return issues
+
+
 def scan_for_recent_changes(rom_path: Path, baseline_rom_path: Optional[Path] = None) -> list[dict]:
     """Compare ROMs to find recent changes that might cause issues."""
     changes = []
@@ -806,6 +990,8 @@ def main():
                        help='Find color/palette issues')
     parser.add_argument('--check-abi', action='store_true',
                        help='Check hook ABI exit state and push/pull balance')
+    parser.add_argument('--find-width-imbalance', action='store_true',
+                       help='Find width-dependent stack imbalances (PHY/PLY with different X flag)')
     parser.add_argument('--json', action='store_true',
                        help='Output as JSON')
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -827,21 +1013,26 @@ def main():
 
     # Collect diagnostics based on filters
     all_diags = []
+    any_filter = any([args.check_hooks, args.find_mx, args.find_hangs,
+                      args.find_colors, args.check_abi, args.find_width_imbalance])
 
-    if args.check_hooks or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
+    if args.check_hooks or not any_filter:
         all_diags.extend(result.hook_violations)
 
-    if args.find_mx or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
+    if args.find_mx or not any_filter:
         all_diags.extend(result.mx_mismatches)
 
-    if args.find_hangs or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
+    if args.find_hangs or not any_filter:
         all_diags.extend(result.potential_hangs)
 
-    if args.find_colors or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
+    if args.find_colors or not any_filter:
         all_diags.extend(result.color_issues)
 
-    if args.check_abi or not any([args.check_hooks, args.find_mx, args.find_hangs, args.find_colors, args.check_abi]):
+    if args.check_abi or not any_filter:
         all_diags.extend(result.hook_abi_issues)
+
+    if args.find_width_imbalance or not any_filter:
+        all_diags.extend(result.width_stack_imbalances)
 
     # Add change detection if baseline provided
     if args.baseline:
@@ -881,6 +1072,7 @@ def main():
                 'color_issues': len(result.color_issues),
                 'hook_state_drift': len(result.hook_state_drift),
                 'hook_abi_issues': len(result.hook_abi_issues),
+                'width_stack_imbalances': len(result.width_stack_imbalances),
             }
         }
         print(json.dumps(output, indent=2))
@@ -936,6 +1128,8 @@ def main():
             print(f"Hook state drift warnings: {len(result.hook_state_drift)}")
         if args.check_abi:
             print(f"Hook ABI issues: {len(result.hook_abi_issues)}")
+        if args.find_width_imbalance or result.width_stack_imbalances:
+            print(f"Width-dependent stack imbalances: {len(result.width_stack_imbalances)}")
 
         if errors:
             return 1

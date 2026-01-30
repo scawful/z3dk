@@ -73,6 +73,7 @@ struct AssembleOptions {
   bool override_checksum = false;
   bool generate_checksum = true;
   bool capture_nocash_symbols = false;
+  bool inject_snes_registers = false;
 };
 
 struct AssembleResult {

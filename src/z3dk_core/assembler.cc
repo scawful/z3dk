@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "interface-lib.h"
+#include "z3dk_core/snes_knowledge_base.h"
 
 namespace z3dk {
 namespace {
@@ -93,10 +94,20 @@ AssembleResult Assembler::Assemble(const AssembleOptions& options) const {
   std::vector<std::string> define_names;
   std::vector<std::string> define_values;
   std::vector<definedata> define_data;
-  define_names.reserve(options.defines.size());
-  define_values.reserve(options.defines.size());
-  define_data.reserve(options.defines.size());
-  for (const auto& def : options.defines) {
+
+  std::vector<std::pair<std::string, std::string>> all_defines = options.defines;
+  if (options.inject_snes_registers) {
+      for (const auto& reg : kSnesRegisters) {
+          std::ostringstream ss;
+          ss << "$" << std::hex << std::uppercase << reg.address;
+          all_defines.push_back({ reg.name, ss.str() });
+      }
+  }
+
+  define_names.reserve(all_defines.size());
+  define_values.reserve(all_defines.size());
+  define_data.reserve(all_defines.size());
+  for (const auto& def : all_defines) {
     define_names.push_back(def.first);
     define_values.push_back(def.second);
     definedata entry{};

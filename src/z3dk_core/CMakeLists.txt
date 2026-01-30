@@ -7,9 +7,11 @@ add_library(
   "${CMAKE_CURRENT_SOURCE_DIR}/emit.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/lint.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/opcode_table.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/snes_knowledge_base.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/snes_diagnostics.cc"
 )
 
-target_compile_features(z3dk-core PRIVATE cxx_std_17)
+target_compile_features(z3dk-core PRIVATE cxx_std_20)
 
 target_include_directories(z3dk-core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}"

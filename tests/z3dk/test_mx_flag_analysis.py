@@ -402,3 +402,68 @@ class TestFindMxMismatches:
         assert len(x_mismatches) == 0, (
             f"Expected no X flag mismatch, got: {x_mismatches}"
         )
+
+    def test_analysis_order_caller_first_misses_mismatch(self):
+        """Analyzing caller before callee can yield false negative: callee entry state is overwritten."""
+        try:
+            from oracle_analyzer import find_mx_mismatches
+        except ImportError:
+            pytest.skip("oracle_analyzer.py not importable from test path")
+
+        caller_snes = LOROM_BASE
+        target_snes = JUMPTABLELOCAL_SNES
+        caller_pc = _pc(caller_snes)
+        target_pc = _pc(target_snes)
+
+        code = {
+            caller_pc: sep(0x30) + jsl(target_snes) + rtl(),
+            target_pc: rtl(),
+        }
+        rom = make_rom(code)
+
+        tracker = StateTracker(rom, 'lorom')
+        # Wrong order: analyze caller first, so we trace into target and overwrite its entry state
+        tracker.analyze_from(caller_snes, RegisterState(m_flag=True, x_flag=True))
+        tracker.analyze_from(target_snes, RegisterState(m_flag=None, x_flag=False))
+
+        labels = {caller_snes: "TestCaller", target_snes: "JumpTableLocal"}
+        mismatches = find_mx_mismatches(rom, tracker, labels)
+
+        # With wrong order, visited[target] is caller's state (X=8), so no mismatch is reported
+        x_mismatches = [m for m in mismatches if 'X flag' in m.get('message', '')]
+        assert len(x_mismatches) == 0, (
+            "Documenting that caller-first order yields false negative; "
+            "analyzer must analyze callees before callers to detect this mismatch"
+        )
+
+    def test_data_label_skipped_no_mismatch_reported(self):
+        """JSL to a label matching data pattern (e.g. Tile16_Data) is skipped by find_mx_mismatches."""
+        try:
+            from oracle_analyzer import find_mx_mismatches
+        except ImportError:
+            pytest.skip("oracle_analyzer.py not importable from test path")
+
+        caller_snes = LOROM_BASE
+        target_snes = JUMPTABLELOCAL_SNES + 0x100  # different from JumpTableLocal
+        caller_pc = _pc(caller_snes)
+        target_pc = _pc(target_snes)
+
+        code = {
+            caller_pc: sep(0x30) + jsl(target_snes) + rtl(),
+            target_pc: rtl(),
+        }
+        rom = make_rom(code)
+
+        tracker = StateTracker(rom, 'lorom')
+        tracker.analyze_from(target_snes, RegisterState(m_flag=True, x_flag=True))
+        tracker.analyze_from(caller_snes, RegisterState(m_flag=True, x_flag=True))
+
+        # Label target as data-like so find_mx_mismatches skips it
+        labels = {caller_snes: "Caller", target_snes: "Tile16_Data"}
+        mismatches = find_mx_mismatches(rom, tracker, labels)
+
+        # Should not report mismatch for this call (data label skipped)
+        for m in mismatches:
+            assert "Tile16_Data" not in str(m.get("message", "")), (
+                f"Data-like label Tile16_Data should be skipped, got: {m}"
+            )

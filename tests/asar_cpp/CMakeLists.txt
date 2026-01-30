@@ -84,6 +84,9 @@ endmacro()
 
 set(CXX_EXTENSIONS OFF)
 
+# Bindings live in src/bindings/c when asar_cpp is under tests/asar_cpp (included from src/)
+set(ASAR_BINDINGS_C "${CMAKE_SOURCE_DIR}/src/bindings/c")
+
 add_custom_target(run-tests)
 set_property(TARGET run-tests PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
 
@@ -109,11 +112,11 @@ if(ASAR_GEN_DLL_TEST)
 		
 		"${CMAKE_CURRENT_SOURCE_DIR}/test.cpp"
 		
-		"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/asardll.c"
-		"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/asardll.h"
+		"${ASAR_BINDINGS_C}/asardll.c"
+		"${ASAR_BINDINGS_C}/asardll.h"
 	)
 
-	target_include_directories(asar-dll-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/")
+	target_include_directories(asar-dll-test PRIVATE "${ASAR_BINDINGS_C}/")
 	target_compile_definitions(asar-dll-test PRIVATE ASAR_TEST_DLL)
 
 	set_asar_test_shared_properties(asar-dll-test)
@@ -126,9 +129,9 @@ if(ASAR_GEN_DLL_TEST)
 
 	add_executable(newtest
 		"${CMAKE_CURRENT_SOURCE_DIR}/newtest.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/asardll.c"
-		"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/asardll.h")
-	target_include_directories(newtest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c/")
+		"${ASAR_BINDINGS_C}/asardll.c"
+		"${ASAR_BINDINGS_C}/asardll.h")
+	target_include_directories(newtest PRIVATE "${ASAR_BINDINGS_C}/")
 	set_asar_test_shared_properties(newtest)
 
 	add_custom_target(run-newtest

@@ -1,0 +1,4 @@
+org $008000
+!define INIDISP $2100
+LDA #$80
+STA INIDISP

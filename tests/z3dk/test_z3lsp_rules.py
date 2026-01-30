@@ -13,11 +13,13 @@ DEBUG = bool(os.environ.get('Z3LSP_TEST_DEBUG'))
 
 
 def find_z3lsp() -> str:
-    root = pathlib.Path(__file__).resolve().parents[1]
+    # Test file is at tests/z3dk/test_z3lsp_rules.py; repo root is parents[1]
+    test_dir = pathlib.Path(__file__).resolve().parent
+    repo_root = test_dir.parents[1]  # z3dk repo root (tests/z3dk -> tests -> repo)
     candidates = [
-        root / 'build' / 'bin' / 'z3lsp',
-        root / 'build' / 'src' / 'z3lsp' / 'z3lsp',
-        root / 'build' / 'z3lsp' / 'z3lsp',
+        repo_root / 'build' / 'bin' / 'z3lsp',
+        repo_root / 'build' / 'src' / 'z3lsp' / 'z3lsp',
+        repo_root / 'build' / 'z3lsp' / 'z3lsp',
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -115,7 +117,30 @@ def write_file(path: pathlib.Path, contents: str):
     path.write_text(contents)
 
 
+def _init_lsp_client(client: LspClient, root_uri: str) -> None:
+    client.send({
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'initialize',
+        'params': {
+            'rootUri': root_uri,
+            'capabilities': {}
+        }
+    })
+    init_deadline = time.time() + 4.0
+    initialized = False
+    while time.time() < init_deadline:
+        message = client.read_message(timeout=0.5)
+        if message and message.get('id') == 1:
+            initialized = True
+            break
+    if not initialized:
+        raise TimeoutError('No initialize response from z3lsp')
+    client.send({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}})
+
+
 def run():
+    """Original test: z3dk.toml with main = Oracle_main.asm; shared.asm included after org has no errors."""
     z3lsp = find_z3lsp()
     with tempfile.TemporaryDirectory() as tmpdir:
         root = pathlib.Path(tmpdir)
@@ -144,26 +169,7 @@ def run():
         client = LspClient(z3lsp)
         try:
             root_uri = root.as_uri()
-            client.send({
-                'jsonrpc': '2.0',
-                'id': 1,
-                'method': 'initialize',
-                'params': {
-                    'rootUri': root_uri,
-                    'capabilities': {}
-                }
-            })
-            init_deadline = time.time() + 4.0
-            initialized = False
-            while time.time() < init_deadline:
-                message = client.read_message(timeout=0.5)
-                if message and message.get('id') == 1:
-                    initialized = True
-                    break
-            if not initialized:
-                raise TimeoutError('No initialize response from z3lsp')
-
-            client.send({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}})
+            _init_lsp_client(client, root_uri)
 
             shared_uri = (root / 'shared.asm').as_uri()
             client.send({
@@ -228,6 +234,84 @@ def run():
                     pass
 
     print('z3lsp rules test: ok')
+
+
+def test_no_toml_main_asm_include_no_missing_org():
+    """With no z3dk.toml, workspace has only Main.asm; opening an include after org must not show Missing org."""
+    z3lsp = find_z3lsp()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = pathlib.Path(tmpdir)
+        # No z3dk.toml - SeedMainCandidates will pick Main.asm
+        write_file(
+            root / 'Main.asm',
+            'org $008000\n'
+            'MainLabel:\n'
+            '  NOP\n'
+            'incsrc "included.asm"\n'
+        )
+        write_file(root / 'included.asm', 'JSL MainLabel\n')
+
+        client = LspClient(z3lsp)
+        try:
+            _init_lsp_client(client, root.as_uri())
+            included_uri = (root / 'included.asm').as_uri()
+            client.send({
+                'jsonrpc': '2.0',
+                'method': 'textDocument/didOpen',
+                'params': {
+                    'textDocument': {
+                        'uri': included_uri,
+                        'languageId': 'asar',
+                        'version': 1,
+                        'text': (root / 'included.asm').read_text()
+                    }
+                }
+            })
+            diags = client.wait_for_diagnostics(included_uri)
+            missing_org = [d for d in diags if 'Missing org or freespace command' in d.get('message', '')]
+            assert not missing_org, f'Included file (after org in Main.asm) should not get Missing org: {missing_org}'
+            errors = [d for d in diags if d.get('severity') == 1]
+            assert not errors, f'Included file should have no errors when main defines MainLabel: {errors}'
+        finally:
+            client.close()
+
+
+def test_diagnostic_path_included_file():
+    """Diagnostic in an included file (subpath) must be attributed to that document, not dropped."""
+    z3lsp = find_z3lsp()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = pathlib.Path(tmpdir)
+        write_file(root / 'z3dk.toml', 'main = "Main.asm"\ninclude_paths = ["."]\n')
+        write_file(root / 'Main.asm', 'org $008000\nincsrc "subdir/other.asm"\n')
+        (root / 'subdir').mkdir(exist_ok=True)
+        # Intentional error in subdir/other.asm so we get a diagnostic for that file
+        write_file(root / 'subdir/other.asm', 'JSL NonexistentLabel\n')
+
+        client = LspClient(z3lsp)
+        try:
+            _init_lsp_client(client, root.as_uri())
+            other_uri = (root / 'subdir' / 'other.asm').as_uri()
+            client.send({
+                'jsonrpc': '2.0',
+                'method': 'textDocument/didOpen',
+                'params': {
+                    'textDocument': {
+                        'uri': other_uri,
+                        'languageId': 'asar',
+                        'version': 1,
+                        'text': (root / 'subdir' / 'other.asm').read_text()
+                    }
+                }
+            })
+            diags = client.wait_for_diagnostics(other_uri)
+            # We expect a diagnostic (label not found) for this document; PathMatchesDocumentPath
+            # must match so the diagnostic is not dropped. So we should see at least one diag for other.asm.
+            # If the assembler reports with relative path "subdir/other.asm", it must match other_uri.
+            errors = [d for d in diags if d.get('severity') == 1]
+            assert any('wasn\'t found' in d.get('message', '') or 'Label' in d.get('message', '') for d in errors), \
+                f'Expected label diagnostic for subdir/other.asm: {diags}'
+        finally:
+            client.close()
 
 
 if __name__ == '__main__':

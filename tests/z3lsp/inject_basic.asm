@@ -1,0 +1,3 @@
+org $008000
+LDA #$80
+STA INIDISP

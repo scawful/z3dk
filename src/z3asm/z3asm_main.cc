@@ -58,6 +58,7 @@ struct CliOptions {
   bool lint_warn_unknown_width = true;
   bool lint_warn_branch_outside_bank = true;
   bool lint_warn_org_collision = true;
+  bool inject_snes_registers = false;
   bool show_summary = false;
   bool show_help = false;
   bool show_version = false;
@@ -86,6 +87,7 @@ void PrintUsage(const char* name) {
       << "  --lint-no-unknown-width  Disable M/X unknown width warnings\n"
       << "  --lint-no-branch         Disable branch-outside-bank warnings\n"
       << "  --lint-no-org            Disable ORG collision warnings\n"
+      << "  --inject-snes-registers  Pre-define standard SNES hardware registers\n"
       << "  --summary                Enable CLI summary output\n"
       << "  --no-summary             Disable CLI summary output\n"
       << "  --version                Show version\n"
@@ -263,6 +265,10 @@ bool ParseArgs(int argc, const char* argv[], CliOptions* options,
     }
     if (arg == "--lint-no-org") {
       options->lint_warn_org_collision = false;
+      continue;
+    }
+    if (arg == "--inject-snes-registers") {
+      options->inject_snes_registers = true;
       continue;
     }
     if (arg == "--summary") {
@@ -661,6 +667,7 @@ int main(int argc, const char* argv[]) {
   }
   assemble_options.capture_nocash_symbols =
       options.symbols_format == "nocash";
+  assemble_options.inject_snes_registers = options.inject_snes_registers;
 
   z3dk::Assembler assembler;
   z3dk::AssembleResult result = assembler.Assemble(assemble_options);

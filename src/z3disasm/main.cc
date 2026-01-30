@@ -11,6 +11,7 @@
 #include "hooks.h"
 #include "formatter.h"
 #include "z3dk_core/opcode_table.h"
+#include "z3dk_core/snes_knowledge_base.h"
 
 namespace fs = std::filesystem;
 using namespace z3disasm;
@@ -139,6 +140,28 @@ int main(int argc, const char* argv[]) {
       if (!operand.empty()) {
         out << " " << operand;
       }
+
+      // Hardware Register Annotation
+      uint32_t target_addr = 0;
+      bool has_target = false;
+      if (info.mode == z3dk::AddrMode::kAbsolute) {
+          target_addr = (snes & 0xFF0000) | (rom[pc+1] | (rom[pc+2] << 8));
+          has_target = true;
+      } else if (info.mode == z3dk::AddrMode::kAbsoluteLong) {
+          target_addr = rom[pc+1] | (rom[pc+2] << 8) | (rom[pc+3] << 16);
+          has_target = true;
+      } else if (info.mode == z3dk::AddrMode::kDirectPage) {
+          target_addr = rom[pc+1]; // Assume DP=0 for simple annotation
+          has_target = true;
+      }
+
+      if (has_target) {
+          std::string hw_note = z3dk::SnesKnowledgeBase::GetHardwareAnnotation(target_addr);
+          if (!hw_note.empty()) {
+              out << " " << hw_note;
+          }
+      }
+
       out << "\n";
 
       if (std::string(info.mnemonic) == "REP" && operand_size == 1) {

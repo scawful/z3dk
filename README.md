@@ -60,7 +60,22 @@ emit = [
 optional reason after `:` (used in diagnostics). `lsp_log_enabled` toggles z3lsp JSON/error logging, and
 `lsp_log_path` overrides the default temp log location (relative paths resolve to the config directory).
 
-### 3. Usage
+**Main file discovery:** If you do not create a `z3dk.toml`, the LSP still picks a main candidate by convention:
+any root-level file named `Main.asm`, `*_main.asm`, or `*-main.asm` (e.g. `Oracle_main.asm`, `Meadow_main.asm`).
+For single-entry projects, a minimal `z3dk.toml` with `main = "Main.asm"` and `include_paths = ["."]` is enough.
+
+**Include paths:** When all `incsrc` paths are relative to the project root (or the main file’s directory),
+`include_paths = ["."]` is sufficient. Subdirs like `Music/`, `Engine/`, `Sprites/` are then found from the root.
+
+### 3. Project layout examples
+
+- **Oracle of Secrets:** `z3dk.toml` with `main = "Oracle_main.asm"`, `include_paths = [".", "Core", "Sprites", ...]`.
+  Entry point and modules live under named dirs; LSP and assembler use the configured main.
+- **Poltergeist (AllHallows Eve):** Flat root with `Main.asm` and `include_paths = ["."]`. All `incsrc` paths
+  (e.g. `Music/...`, `Engine/...`) are relative to the root; a minimal `z3dk.toml` with `main = "Main.asm"`
+  and `include_paths = ["."]` is enough for LSP and assembly.
+
+### 4. Usage
 
 **Assembly:**
 ```bash

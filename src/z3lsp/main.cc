@@ -17,6 +17,8 @@
 #include "z3dk_core/lint.h"
 #include "z3dk_core/opcode_descriptions.h"
 #include "z3dk_core/opcode_table.h"
+#include "z3dk_core/snes_knowledge_base.h"
+#include "z3dk_core/snes_diagnostics.h"
 
 #include "logging.h"
 #include "utils.h"
@@ -167,6 +169,21 @@ z3lsp::DocumentState AnalyzeDocument(const z3lsp::DocumentState& doc,
     fs::path candidate = z3lsp::UriToPath(root_uri);
     if (!candidate.empty() && fs::exists(candidate)) {
       analysis_root_path = candidate;
+    }
+  }
+  // When dependency graph is empty (e.g. only an include file opened), SelectRoot returns the doc
+  // and we would assemble the include alone. Use a main candidate (from z3dk.toml or SeedMainCandidates
+  // e.g. Main.asm) as assembly root so we get correct diagnostics and symbol table.
+  fs::path doc_path_for_root = fs::path(doc.path);
+  if (!doc_path_for_root.empty() &&
+      z3lsp::NormalizePath(analysis_root_path) == z3lsp::NormalizePath(doc_path_for_root) &&
+      workspace.main_candidates.count(doc.uri) == 0 && !workspace.main_candidates.empty()) {
+    for (const auto& main_uri : workspace.main_candidates) {
+      fs::path main_path = z3lsp::UriToPath(main_uri);
+      if (!main_path.empty() && fs::exists(main_path) && fs::is_regular_file(main_path)) {
+        analysis_root_path = main_path;
+        break;
+      }
     }
   }
   fs::path analysis_root_dir;
@@ -408,11 +425,30 @@ z3lsp::DocumentState AnalyzeDocument(const z3lsp::DocumentState& doc,
                              lint_diags.begin(),
                              lint_diags.end());
   
+  // Add SNES Hardware Quirk Diagnostics
+  auto quirk_diags = z3dk::DiagnoseRegisterQuirks(doc.text, doc.path);
+  updated.diagnostics.insert(updated.diagnostics.end(),
+                             quirk_diags.begin(),
+                             quirk_diags.end());
+  
   updated.labels = result.labels;
   updated.defines = result.defines;
   updated.source_map = result.source_map;
   updated.written_blocks = result.written_blocks;
   updated.symbols = std::move(doc_symbols);
+
+  // Include labels and defines from this assembly so missing-label suppression works
+  // when we assembled from main and the "missing" symbol is defined in the main.
+  for (const auto& label : result.labels) {
+    if (!label.name.empty()) {
+      known_symbols.insert(label.name);
+    }
+  }
+  for (const auto& def : result.defines) {
+    if (!def.name.empty()) {
+      known_symbols.insert(def.name);
+    }
+  }
 
   if (!known_symbols.empty()) {
     auto should_suppress_missing_label = [&](const z3dk::Diagnostic& diag) {
@@ -478,6 +514,11 @@ z3lsp::DocumentState AnalyzeDocument(const z3lsp::DocumentState& doc,
           }
         }
       }
+    }
+    // When we assembled from a main candidate (graph was empty), check that main file includes doc after org
+    if (!suppress_missing_org && analysis_root_path != doc_path &&
+        z3lsp::ParentIncludesChildAfterOrg(analysis_root_path, doc_path, include_paths_for_parent_check)) {
+      suppress_missing_org = true;
     }
 
     if (suppress_missing_org) {
@@ -729,6 +770,17 @@ std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
     return json(nullptr);
   }
 
+  // Check if token is a known SNES Register (Name)
+  auto reg_info_name = z3dk::SnesKnowledgeBase::GetRegisterInfo(*token);
+  if (reg_info_name.has_value()) {
+      std::ostringstream hover_text;
+      hover_text << "**" << reg_info_name->name << "** ($" << std::hex << std::uppercase << reg_info_name->address << ")\n\n";
+      hover_text << reg_info_name->description;
+      json hover;
+      hover["contents"] = { {"kind", "markdown"}, {"value", hover_text.str()} };
+      return hover;
+  }
+
   // Check if token is a label (O(1) lookup)
   auto label_it = doc.label_map.find(*token);
   if (label_it != doc.label_map.end()) {
@@ -736,6 +788,13 @@ std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
     std::ostringstream hover_text;
     hover_text << label->name << " = $" << std::hex << std::uppercase
                << label->address;
+
+    // Check if the label points to a known SNES Register
+    auto reg_info_addr = z3dk::SnesKnowledgeBase::GetRegisterInfo(label->address);
+    if (reg_info_addr.has_value()) {
+        hover_text << "\n\n**SNES Register:** " << reg_info_addr->name;
+        hover_text << "\n\n" << reg_info_addr->description;
+    }
 
     // Zelda Intelligence: Routine/RAM documentation
     auto zelda_it = kVanillaZeldaKnowledge.find(label->address);
@@ -768,6 +827,18 @@ std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
   if (token->size() >= 2 && (*token)[0] == '$') {
     try {
       uint32_t addr = std::stoul(token->substr(1), nullptr, 16);
+      
+      // Check SNES Registers
+      auto reg_info_addr = z3dk::SnesKnowledgeBase::GetRegisterInfo(addr);
+      if (reg_info_addr.has_value()) {
+          std::ostringstream hover_text;
+          hover_text << "**" << reg_info_addr->name << "** ($" << std::hex << std::uppercase << addr << ")\n\n";
+          hover_text << reg_info_addr->description;
+          json hover;
+          hover["contents"] = { {"kind", "markdown"}, {"value", hover_text.str()} };
+          return hover;
+      }
+
       auto zelda_it = kVanillaZeldaKnowledge.find(addr);
       if (zelda_it != kVanillaZeldaKnowledge.end()) {
         std::ostringstream hover_text;
@@ -789,6 +860,21 @@ std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
   // Check if token is a 65816 opcode (opcode_descs is already a hash map)
   std::string upper_token = *token;
   for (char& c : upper_token) c = std::toupper(c);
+
+  // Use SnesKnowledgeBase for Opcode info
+  auto op_info = z3dk::SnesKnowledgeBase::GetOpcodeInfo(upper_token);
+  if (op_info.has_value()) {
+      std::ostringstream hover_text;
+      hover_text << "**" << op_info->mnemonic << "** - " << op_info->full_name << "\n\n";
+      hover_text << op_info->description << "\n\n";
+      hover_text << "**Flags:** " << op_info->flags << "\n\n";
+      if (op_info->timing_table && *op_info->timing_table) {
+          hover_text << "**Addressing Modes & Cycles:**\n```text\n" << op_info->timing_table << "\n```";
+      }
+      json hover;
+      hover["contents"] = { {"kind", "markdown"}, {"value", hover_text.str()} };
+      return hover;
+  }
 
   const auto& opcode_descs = z3dk::GetOpcodeDescriptions();
   auto opcode_it = opcode_descs.find(upper_token);

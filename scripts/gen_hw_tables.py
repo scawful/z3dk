@@ -33,6 +33,7 @@ def main():
         with open('../../docs/reference/snes_registers.json', 'r') as f:
             registers = json.load(f)
         
+        # ... (opcodes/quirks)
         # Load Opcodes
         with open('../../docs/reference/65816_opcodes.json', 'r') as f:
             opcodes = json.load(f)
@@ -40,13 +41,14 @@ def main():
         # Load Quirks
         with open('../../docs/reference/snes_quirks.json', 'r') as f:
             quirks = json.load(f)
-            
-        print(f"Loaded {len(registers)} registers, {len(opcodes)} opcodes, {len(quirks)} quirks.")
 
         out_path = '../src/z3dk_core/snes_data.generated.h'
         
+        seen_names = {} # name -> count
+
         with open(out_path, 'w') as f:
             f.write("#pragma once\n")
+            # ...
             f.write("#include <cstdint>\n")
             f.write("#include <array>\n")
             f.write("#include <cstddef>\n\n")
@@ -64,9 +66,24 @@ def main():
                 try:
                     addr_str = reg['address'].replace('$', '0x')
                     addr = int(addr_str, 16)
-                    name = escape_cpp_string(sanitize_name(reg['name']))
+                    raw_name = reg['name']
+                    is_read = raw_name.startswith('*')
+                    name = sanitize_name(raw_name)
+                    
+                    if name in seen_names:
+                        if is_read:
+                            name = name + "_RD"
+                        else:
+                            name = name + "_WR"
+                        # If still exists, append address
+                        if name in seen_names:
+                            name = name + "_" + addr_str.replace('0x', '')
+                    
+                    seen_names[name] = seen_names.get(name, 0) + 1
+                    
+                    clean_name = escape_cpp_string(name)
                     desc = escape_cpp_string(reg['description'])
-                    f.write(f"    SnesRegisterInfo{{ {addr:#06x}, {name}, {desc} }},\n")
+                    f.write(f"    SnesRegisterInfo{{ {addr:#06x}, {clean_name}, {desc} }},\n")
                 except ValueError:
                     print(f"Skipping register with invalid address: {reg['address']}")
             f.write("};\n\n")

@@ -144,13 +144,18 @@ int main(int argc, const char* argv[]) {
       // Hardware Register Annotation
       uint32_t target_addr = 0;
       bool has_target = false;
-      if (info.mode == z3dk::AddrMode::kAbsolute) {
+      if (info.mode == z3dk::AddrMode::kAbsolute || 
+          info.mode == z3dk::AddrMode::kAbsoluteX || 
+          info.mode == z3dk::AddrMode::kAbsoluteY) {
           target_addr = (snes & 0xFF0000) | (rom[pc+1] | (rom[pc+2] << 8));
           has_target = true;
-      } else if (info.mode == z3dk::AddrMode::kAbsoluteLong) {
+      } else if (info.mode == z3dk::AddrMode::kAbsoluteLong ||
+                 info.mode == z3dk::AddrMode::kAbsoluteLongX) {
           target_addr = rom[pc+1] | (rom[pc+2] << 8) | (rom[pc+3] << 16);
           has_target = true;
-      } else if (info.mode == z3dk::AddrMode::kDirectPage) {
+      } else if (info.mode == z3dk::AddrMode::kDirectPage ||
+                 info.mode == z3dk::AddrMode::kDirectPageX ||
+                 info.mode == z3dk::AddrMode::kDirectPageY) {
           target_addr = rom[pc+1]; // Assume DP=0 for simple annotation
           has_target = true;
       }

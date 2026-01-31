@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -96,13 +97,6 @@ AssembleResult Assembler::Assemble(const AssembleOptions& options) const {
   std::vector<definedata> define_data;
 
   std::vector<std::pair<std::string, std::string>> all_defines = options.defines;
-  if (options.inject_snes_registers) {
-      for (const auto& reg : kSnesRegisters) {
-          std::ostringstream ss;
-          ss << "$" << std::hex << std::uppercase << reg.address;
-          all_defines.push_back({ reg.name, ss.str() });
-      }
-  }
 
   define_names.reserve(all_defines.size());
   define_values.reserve(all_defines.size());
@@ -116,20 +110,42 @@ AssembleResult Assembler::Assemble(const AssembleOptions& options) const {
     define_data.push_back(entry);
   }
 
+  std::vector<MemoryFile> memory_files = options.memory_files;
+  if (options.inject_snes_registers) {
+      std::ostringstream ss;
+      for (const auto& reg : kSnesRegisters) {
+          ss << reg.name << " = $" << std::hex << std::uppercase << reg.address << "\n";
+          // Also add as define for compatibility with !INIDISP
+          ss << "!" << reg.name << " = $" << std::hex << std::uppercase << reg.address << "\n";
+      }
+      
+      // Read the main patch file
+      std::ifstream f(options.patch_path);
+      if (f.is_open()) {
+          std::string content((std::istreambuf_iterator<char>(f)),
+                              std::istreambuf_iterator<char>());
+          
+          MemoryFile mf;
+          mf.path = options.patch_path;
+          mf.contents = ss.str() + "\n" + content;
+          memory_files.push_back(std::move(mf));
+      }
+  }
+
   std::vector<std::string> memory_paths;
   std::vector<std::string> memory_contents;
-  std::vector<memoryfile> memory_files;
-  memory_paths.reserve(options.memory_files.size());
-  memory_contents.reserve(options.memory_files.size());
-  memory_files.reserve(options.memory_files.size());
-  for (const auto& file : options.memory_files) {
+  std::vector<memoryfile> asar_memory_files;
+  memory_paths.reserve(memory_files.size());
+  memory_contents.reserve(memory_files.size());
+  asar_memory_files.reserve(memory_files.size());
+  for (const auto& file : memory_files) {
     memory_paths.push_back(file.path);
     memory_contents.push_back(file.contents);
     memoryfile mem{};
     mem.path = memory_paths.back().c_str();
     mem.buffer = memory_contents.back().data();
     mem.length = memory_contents.back().size();
-    memory_files.push_back(mem);
+    asar_memory_files.push_back(mem);
   }
 
   patchparams params{};
@@ -148,8 +164,8 @@ AssembleResult Assembler::Assemble(const AssembleOptions& options) const {
   params.additional_define_count = static_cast<int>(define_data.size());
   params.stdincludesfile = options.std_includes_path.empty() ? nullptr : options.std_includes_path.c_str();
   params.stddefinesfile = options.std_defines_path.empty() ? nullptr : options.std_defines_path.c_str();
-  params.memory_files = memory_files.empty() ? nullptr : memory_files.data();
-  params.memory_file_count = static_cast<int>(memory_files.size());
+  params.memory_files = asar_memory_files.empty() ? nullptr : asar_memory_files.data();
+  params.memory_file_count = static_cast<int>(asar_memory_files.size());
   params.override_checksum_gen = options.override_checksum;
   params.generate_checksum = options.generate_checksum;
   params.full_call_stack = options.full_call_stack;

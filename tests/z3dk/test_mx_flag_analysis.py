@@ -20,8 +20,8 @@ from typing import Optional
 
 import pytest
 
-# Add scripts directory to path
-SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
+# Add z3dk scripts directory to path (repo root = parent of tests/)
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from static_analyzer import (
@@ -329,6 +329,23 @@ class TestRegisterState:
         copy.m_flag = False
         assert original.m_flag is True  # unchanged
 
+    def test_65816_p_register_bits_sep_rep(self):
+        """65816 P register: bit 4 (0x10) = X flag, bit 5 (0x20) = M flag (SNES/65816 reference)."""
+        # SEP sets bits → 8-bit; REP clears bits → 16-bit
+        state = RegisterState(m_flag=False, x_flag=False)
+        # SEP #$20 only: set M (bit 5) → 8-bit A
+        state.m_flag = True
+        state.x_flag = False
+        assert state.m_flag is True and state.x_flag is False
+        # SEP #$10 only: set X (bit 4) → 8-bit X/Y
+        state.m_flag = False
+        state.x_flag = True
+        assert state.m_flag is False and state.x_flag is True
+        # REP #$30 clears both → 16-bit
+        state.m_flag = False
+        state.x_flag = False
+        assert state.m_width() == 2 and state.x_width() == 2
+
 
 # =============================================================================
 # Tests: find_mx_mismatches integration
@@ -466,4 +483,52 @@ class TestFindMxMismatches:
         for m in mismatches:
             assert "Tile16_Data" not in str(m.get("message", "")), (
                 f"Data-like label Tile16_Data should be skipped, got: {m}"
+            )
+
+
+# =============================================================================
+# Tests: oracle_analyzer load_hooks_json and data-label regex
+# =============================================================================
+
+class TestOracleAnalyzerHelpers:
+    """Test oracle_analyzer helpers: load_hooks_json return shape, data-label regex."""
+
+    def test_load_hooks_json_missing_file_returns_four_tuple(self):
+        """load_hooks_json(non_existent_path) returns (list, dict, dict, dict)."""
+        try:
+            from oracle_analyzer import load_hooks_json
+        except ImportError:
+            pytest.skip("oracle_analyzer not importable")
+        path = Path(__file__).parent / "nonexistent_hooks_12345.json"
+        result = load_hooks_json(path)
+        assert len(result) == 4
+        hooks_list, state_expectations, exit_expectations, hook_meta = result
+        assert isinstance(hooks_list, list)
+        assert isinstance(state_expectations, dict)
+        assert isinstance(exit_expectations, dict)
+        assert isinstance(hook_meta, dict)
+
+    def test_oracle_pos_label_treated_as_data_skipped_by_find_mx(self):
+        """Labels like oracle_pos0_Data match pos\\d_ and are skipped by find_mx_mismatches."""
+        try:
+            from oracle_analyzer import find_mx_mismatches
+        except ImportError:
+            pytest.skip("oracle_analyzer not importable")
+        caller_snes = LOROM_BASE
+        target_snes = 0x029000  # arbitrary
+        caller_pc = _pc(caller_snes)
+        target_pc = _pc(target_snes)
+        code = {
+            caller_pc: sep(0x30) + jsl(target_snes) + rtl(),
+            target_pc: rtl(),
+        }
+        rom = make_rom(code)
+        tracker = StateTracker(rom, 'lorom')
+        tracker.analyze_from(target_snes, RegisterState(m_flag=True, x_flag=True))
+        tracker.analyze_from(caller_snes, RegisterState(m_flag=True, x_flag=True))
+        labels = {caller_snes: "Caller", target_snes: "oracle_pos0_Data"}
+        mismatches = find_mx_mismatches(rom, tracker, labels)
+        for m in mismatches:
+            assert "oracle_pos0_Data" not in str(m.get("message", "")), (
+                f"Data-like label oracle_pos0_Data should be skipped, got: {m}"
             )

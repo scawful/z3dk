@@ -369,7 +369,6 @@ string replace_macro_args(const char* line) {
 			in += depth+1;
 
 			bool is_variadic_arg = false;
-			bool is_variadic_shorthand = false;
 			if (in[0] == '.' && in[1] == '.' && in[2] == '.' && in[3] == '[')
 			{
 				if (end[-1] != ']')
@@ -379,53 +378,10 @@ string replace_macro_args(const char* line) {
 				in += 4;
 				end--;
 			}
-			else if (in[0] == '.' && in[1] == '.' && in[2] == '.' && in[3] == '>')
-			{
-				is_variadic_arg = true;
-				is_variadic_shorthand = true;
-			}
 
 			//if(!inmacro) asar_throw_error(0, error_type_block, error_id_macro_param_outside_macro);
 			if(is_variadic_arg && !current_macro->variadic) asar_throw_error(0, error_type_block, error_id_macro_not_varadic, "<...[math]>");
 			//*end=0;
-			if (is_variadic_shorthand)
-			{
-				if (!current_macro->variadic) asar_throw_error(0, error_type_block, error_id_macro_not_varadic, "<...>");
-
-				string index_value;
-				if (defines.exists("a"))
-				{
-					index_value = defines.find("a");
-				}
-				else if (clidefines.exists("a"))
-				{
-					index_value = clidefines.find("a");
-				}
-				else if (builtindefines.exists("a"))
-				{
-					index_value = builtindefines.find("a");
-				}
-
-				if (index_value.length() > 0)
-				{
-					int arg_num = getnum(index_value.data());
-					if (arg_num < 0) asar_throw_error(1, error_type_block, error_id_vararg_out_of_bounds, generate_macro_arg_string(arg_num, depth).raw(), "");
-					if (arg_num > current_macro_numargs-current_macro->numargs) asar_throw_error(1, error_type_block, error_id_vararg_out_of_bounds, generate_macro_arg_string(arg_num, depth).raw(), generate_macro_hint_string(arg_num, current_macro, depth).raw());
-					out += current_macro_args[arg_num + current_macro->numargs - 1];
-				}
-				else
-				{
-					int base = current_macro->numargs - 1;
-					int count = current_macro_numargs - base;
-					for (int i = 0; i < count; i++)
-					{
-						if (i > 0) out += ", ";
-						out += current_macro_args[base + i];
-					}
-				}
-				in = end + 1;
-				continue;
-			}
 			string param;
 			string temp(in, end-in);
 			resolvedefines(param, temp);
@@ -433,7 +389,7 @@ string replace_macro_args(const char* line) {
 			bool valid_named_param = confirmname(in);
 			if (!is_variadic_arg)
 			{
-				if (!valid_named_param) asar_throw_error(0, error_type_block, error_id_invalid_macro_param_name);
+				if (!valid_named_param && !current_macro->variadic) asar_throw_error(0, error_type_block, error_id_invalid_macro_param_name);
 				bool found=false;
 				for (int j=0;current_macro->arguments[j];j++)
 				{
@@ -446,7 +402,24 @@ string replace_macro_args(const char* line) {
 				}
 				if (!found)
 				{
-					asar_throw_error(0, error_type_block, error_id_macro_param_not_found, generate_macro_arg_string(in, depth).raw(), generate_macro_hint_string(in, current_macro, depth).raw());
+					snes_label ret;
+					if(valid_named_param && !current_macro->variadic)
+					{
+						asar_throw_error(0, error_type_block, error_id_macro_param_not_found, generate_macro_arg_string(in, depth).raw(), generate_macro_hint_string(in, current_macro, depth).raw());
+					}
+					if(current_macro->variadic && valid_named_param && !labelval(in, &ret, false))
+					{
+						asar_throw_error(0, error_type_block, error_id_macro_param_not_found, generate_macro_arg_string(in, depth).raw(), generate_macro_hint_string(in, current_macro, depth).raw());
+					}
+
+					asar_throw_warning(0, warning_id_feature_deprecated, "'<math>' syntax for variadic macro parameters", "Use '<...[math]>' instead.");
+					int arg_num = getnum(in);
+
+					if(forwardlabel) asar_throw_error(0, error_type_block, error_id_label_forward);
+
+					if (arg_num < 0) asar_throw_error(1, error_type_block, error_id_vararg_out_of_bounds, generate_macro_arg_string(arg_num, depth).raw(), "");
+					if (arg_num > current_macro_numargs-current_macro->numargs) asar_throw_error(1, error_type_block, error_id_vararg_out_of_bounds, generate_macro_arg_string(arg_num, depth).raw(), generate_macro_hint_string(arg_num, current_macro, depth).raw());
+					out+=current_macro_args[arg_num+current_macro->numargs-1];
 				}
 			}
 			else

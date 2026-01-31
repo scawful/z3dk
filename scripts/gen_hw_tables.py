@@ -42,13 +42,51 @@ def main():
         with open('../../docs/reference/snes_quirks.json', 'r') as f:
             quirks = json.load(f)
 
-        out_path = '../src/z3dk_core/snes_data.generated.h'
-        
-        seen_names = {} # name -> count
+        # First pass: Expand registers
+        expanded_registers = []
+        seen_names = {}
+        for reg in registers:
+            try:
+                raw_addr_str = reg['address']
+                addr_parts = re.split(r'[/ I\n,]', raw_addr_str)
+                
+                raw_name = reg['name']
+                name_parts = re.split(r'[/ I\n,]', raw_name)
+                
+                extracted_addrs = []
+                for ap in addr_parts:
+                    clean_ap = re.sub(r'[^A-Z0-9]', '', ap.upper())
+                    if clean_ap.endswith('H'): clean_ap = clean_ap[:-1]
+                    if not clean_ap: continue
+                    try: extracted_addrs.append(int(clean_ap, 16))
+                    except ValueError: continue
+                
+                if not extracted_addrs: continue
+                
+                print(f"Register {reg['name']} at {reg['address']} -> {extracted_addrs}")
+                
+                is_read = raw_name.startswith('*')
+                for i, addr in enumerate(extracted_addrs):
+                    name = raw_name
+                    if len(name_parts) == len(extracted_addrs): name = name_parts[i]
+                    elif i < len(name_parts): name = name_parts[i]
+                    
+                    name = sanitize_name(name)
+                    if name in seen_names:
+                        if is_read: name += "_RD"
+                        else: name += "_WR"
+                        if name in seen_names: name += f"_{addr:04X}"
+                    seen_names[name] = seen_names.get(name, 0) + 1
+                    expanded_registers.append({
+                        'address': addr,
+                        'name': name,
+                        'description': reg['description']
+                    })
+            except Exception: continue
 
+        out_path = '../src/z3dk_core/snes_data.generated.h'
         with open(out_path, 'w') as f:
             f.write("#pragma once\n")
-            # ...
             f.write("#include <cstdint>\n")
             f.write("#include <array>\n")
             f.write("#include <cstddef>\n\n")
@@ -61,31 +99,11 @@ def main():
             f.write("    const char* description;\n")
             f.write("};\n\n")
 
-            f.write(f"constexpr std::array<SnesRegisterInfo, {len(registers)}> kSnesRegisters = {{\n")
-            for reg in registers:
-                try:
-                    addr_str = reg['address'].replace('$', '0x')
-                    addr = int(addr_str, 16)
-                    raw_name = reg['name']
-                    is_read = raw_name.startswith('*')
-                    name = sanitize_name(raw_name)
-                    
-                    if name in seen_names:
-                        if is_read:
-                            name = name + "_RD"
-                        else:
-                            name = name + "_WR"
-                        # If still exists, append address
-                        if name in seen_names:
-                            name = name + "_" + addr_str.replace('0x', '')
-                    
-                    seen_names[name] = seen_names.get(name, 0) + 1
-                    
-                    clean_name = escape_cpp_string(name)
-                    desc = escape_cpp_string(reg['description'])
-                    f.write(f"    SnesRegisterInfo{{ {addr:#06x}, {clean_name}, {desc} }},\n")
-                except ValueError:
-                    print(f"Skipping register with invalid address: {reg['address']}")
+            f.write(f"constexpr std::array<SnesRegisterInfo, {len(expanded_registers)}> kSnesRegisters = {{\n")
+            for reg in expanded_registers:
+                name = escape_cpp_string(reg['name'])
+                desc = escape_cpp_string(reg['description'])
+                f.write(f"    SnesRegisterInfo{{ {reg['address']:#06x}, {name}, {desc} }},\n")
             f.write("};\n\n")
 
             # Opcodes

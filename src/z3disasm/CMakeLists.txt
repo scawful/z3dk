@@ -9,7 +9,7 @@ add_executable(z3disasm
   formatter.cc
 )
 
-target_compile_features(z3disasm PRIVATE cxx_std_17)
+target_compile_features(z3disasm PRIVATE cxx_std_20)
 
 target_include_directories(z3disasm PRIVATE
   "../z3dk_core"

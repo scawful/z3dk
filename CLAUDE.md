@@ -21,9 +21,10 @@ cd ~/src/hobby/z3dk
 ./run_tests.sh
 
 # Python tests (no ROM required)
-pytest tests/test_mx_flag_analysis.py -v    # M/X flag analysis
-pytest tests/test_label_structs.py -v       # Label generation
-pytest tests/test_z3lsp_rules.py -v         # LSP rules
+pytest tests/z3dk/test_mx_flag_analysis.py -v    # M/X flag analysis
+pytest tests/z3dk/test_label_structs.py -v       # Label generation
+pytest tests/z3dk/test_z3lsp_rules.py -v         # LSP rules
+pytest tests/asar_compat/test_asar_syntax.py -v  # Asar syntax compat (needs z3asm in build or Z3ASM)
 ```
 
 ## Architecture
@@ -87,6 +88,11 @@ when an opened file is an include so assembly runs from the main file.
 prefix and suffix-after-underscore (oracle-of-secrets). Other projects (e.g. poltergeist) rely on the
 full assembly symbol table once the main file is assembled; no code change is required if `z3dk.toml`
 points at the real main file.
+
+## 65816 reference (M/X flags)
+
+- **P register:** Bit 4 (0x10) = X flag (1 = 8-bit index X/Y), bit 5 (0x20) = M flag (1 = 8-bit accumulator). SEP sets bits → 8-bit; REP clears bits → 16-bit. See `~/src/hobby/docs/reference/65816_instruction_set.md` and SNES dev manuals.
+- **PLY/PHY:** Size depends on X flag: X=8-bit → 1 byte, X=16-bit → 2 bytes. Mismatched push/pull width causes stack corruption (e.g. JumpTableLocal softlock).
 
 ## Pitfalls
 

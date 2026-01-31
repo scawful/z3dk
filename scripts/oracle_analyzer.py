@@ -50,10 +50,10 @@ KNOWN_HOOKS = [
     (0x008000, "Reset", True, True, "ROM entry point"),
     (0x0080C9, "NMI_Handler", True, True, "NMI entry - must be 8-bit"),
 
-    # Jump table dispatch - REQUIRES X=16-bit for correct PLY of JSL return
-    # PLY with X=8-bit pops only 1 byte instead of 2, corrupting the return address
+    # Jump table dispatch: PLY pops 1 byte when X=8-bit, 2 when X=16-bit.
+    # Caller and routine must agree so push/pull match; Oracle convention is X=8-bit here.
     (0x008781, "JumpTableLocal", None, True,
-     "Stack table dispatch - REQUIRES X=8-bit for correct PLY/PLA stack math"),
+     "Stack table dispatch - REQUIRES X=8-bit for correct PLY (1-byte pull)"),
 
     # Overworld hooks
     (0x02C0C3, "Overworld_SetCameraBounds", True, True, "Camera calculation"),
@@ -121,6 +121,7 @@ class OracleAnalysisResult:
     hook_state_drift: list[dict]
     hook_abi_issues: list[dict]
     width_stack_imbalances: list[dict] = field(default_factory=list)
+    sprite_table_overflow: list[dict] = field(default_factory=list)
 
     def all_diagnostics(self):
         return (
@@ -131,7 +132,8 @@ class OracleAnalysisResult:
             [AnalysisDiagnostic(**c) for c in self.color_issues] +
             [AnalysisDiagnostic(**d) for d in self.hook_state_drift] +
             [AnalysisDiagnostic(**a) for a in self.hook_abi_issues] +
-            [AnalysisDiagnostic(**w) for w in self.width_stack_imbalances]
+            [AnalysisDiagnostic(**w) for w in self.width_stack_imbalances] +
+            [AnalysisDiagnostic(**s) for s in self.sprite_table_overflow]
         )
 
 
@@ -162,7 +164,7 @@ def load_hooks_json(path: Path) -> tuple[list[tuple], dict[int, RegisterState], 
         if data_label_re.match(label):
             return True
         lower = label.lower()
-        if lower.startswith('oracle_pos') and re.search(r'pos\\d_', lower):
+        if lower.startswith('oracle_pos') and re.search(r'pos\d_', lower):
             return True
         for suffix in data_label_suffixes:
             if lower.endswith(suffix):
@@ -184,7 +186,7 @@ def load_hooks_json(path: Path) -> tuple[list[tuple], dict[int, RegisterState], 
         return None
 
     if not path.exists():
-        return hooks_list, state_expectations
+        return hooks_list, state_expectations, exit_expectations, hook_meta
 
     with open(path) as f:
         data = json.load(f)
@@ -388,6 +390,7 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
     hook_state_drift = []
     hook_abi_issues = check_hook_abi(tracker, labels, hooks_to_analyze, exit_expectations, hook_meta)
     width_stack_imbalances = find_width_dependent_stack_imbalance(rom_data, tracker, labels, hook_meta)
+    sprite_table_overflow = find_sprite_table_overflow(rom_data)
 
     return OracleAnalysisResult(
         base_result=base_result,
@@ -399,6 +402,7 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
         hook_state_drift=hook_state_drift,
         hook_abi_issues=hook_abi_issues,
         width_stack_imbalances=width_stack_imbalances,
+        sprite_table_overflow=sprite_table_overflow,
     )
 
 
@@ -621,7 +625,7 @@ def find_mx_mismatches(
         if data_label_re.match(label):
             return True
         lower = label.lower()
-        if lower.startswith('oracle_pos') and re.search(r'pos\\d_', lower):
+        if lower.startswith('oracle_pos') and re.search(r'pos\d_', lower):
             return True
         for suffix in data_label_suffixes:
             if lower.endswith(suffix):
@@ -692,14 +696,14 @@ def find_hang_points(rom_data: bytes, tracker: StateTracker, labels: dict[int, s
     # 3. JSL to non-existent address
 
     # Pattern: APU polling without timeout
-    # LDA $2140 (AD 40 21) : CMP #$XX (C9 XX) : BNE rel (D0 XX)
-    for pc in range(len(rom_data) - 6):
+    # LDA $2140 (AD 40 21, 3B) : CMP #$XX (C9 XX, 2B) : BNE rel (D0 XX, 2B)
+    for pc in range(len(rom_data) - 7):
         if (rom_data[pc] == 0xAD and          # LDA abs
             rom_data[pc+1] == 0x40 and
             rom_data[pc+2] == 0x21 and        # $2140
-            rom_data[pc+4] == 0xC9 and        # CMP #imm
-            rom_data[pc+6] == 0xD0):          # BNE
-            offset = rom_data[pc+7]
+            rom_data[pc+4] == 0xC9 and        # CMP #imm (pc+3=C9)
+            rom_data[pc+5] == 0xD0):          # BNE opcode
+            offset = rom_data[pc+6]           # BNE relative offset
             if offset >= 0x80:
                 offset -= 0x100
             # Check if branch goes backwards (potential infinite loop)
@@ -914,6 +918,134 @@ def find_width_dependent_stack_imbalance(
     return issues
 
 
+def find_sprite_table_overflow(rom_data: bytes, mapper: str = 'lorom') -> list[dict]:
+    """Check that no sprite property data bleeds past entry $F2 in the vanilla tables.
+
+    The 8 property tables in bank $0D each hold entries for sprite IDs $00-$F2.
+    Table base addresses (SNES):
+        $0DB080, $0DB173, $0DB266, $0DB359,
+        $0DB44C, $0DB53F, $0DB632, $0DB725
+    SpritePrep_LoadProperties begins at $0DB818.
+
+    For each table, entries $F3-$FF occupy the 13 bytes immediately before the
+    next table's base (or before $0DB818 for Table 8).  If any of those bytes
+    differ from the vanilla ROM's pattern, something overflowed.
+
+    Rather than requiring a vanilla baseline, we use a simpler sentinel: the
+    first 8 bytes of SpritePrep_LoadProperties at $0DB818 must match the known
+    vanilla opcodes.  If they have been overwritten, Table 8 overflowed.
+
+    We also check each inter-table gap ($F3-$FF range) for non-zero bytes that
+    would indicate a property write beyond the valid range.
+    """
+    issues = []
+
+    TABLE_BASES = [
+        0x0DB080, 0x0DB173, 0x0DB266, 0x0DB359,
+        0x0DB44C, 0x0DB53F, 0x0DB632, 0x0DB725,
+    ]
+    TABLE_NAMES = [
+        "OAM/Harmless", "HP", "Damage", "Data",
+        "Hitbox", "Fall", "Prize", "Deflect",
+    ]
+    MAX_VALID_ID = 0xF2
+    ENTRIES_PER_TABLE = 0xF3  # IDs $00-$F2
+    LOAD_PROPERTIES_ADDR = 0x0DB818
+
+    # Known first 8 bytes of SpritePrep_LoadProperties (vanilla)
+    # PHB : PHK : PLB : LDA.w $0E20,X ...
+    # 8B 4B AB BD 20 0E C9 00
+    LOAD_PROPERTIES_SENTINEL = bytes([0x8B, 0x4B, 0xAB, 0xBD, 0x20, 0x0E, 0xC9, 0x00])
+
+    # Check sentinel: has Table 8 overflowed into LoadProperties?
+    sentinel_pc = snes_to_pc(LOAD_PROPERTIES_ADDR, mapper)
+    if 0 <= sentinel_pc < len(rom_data) - len(LOAD_PROPERTIES_SENTINEL):
+        actual = rom_data[sentinel_pc:sentinel_pc + len(LOAD_PROPERTIES_SENTINEL)]
+        if actual != LOAD_PROPERTIES_SENTINEL:
+            issues.append({
+                'severity': 'error',
+                'message': (
+                    f"SpritePrep_LoadProperties at ${LOAD_PROPERTIES_ADDR:06X} has been "
+                    f"overwritten — sprite property Table 8 (Deflect) overflowed past ID $F2"
+                ),
+                'address': LOAD_PROPERTIES_ADDR,
+                'context': {
+                    'expected': ' '.join(f'{b:02X}' for b in LOAD_PROPERTIES_SENTINEL),
+                    'actual': ' '.join(f'{b:02X}' for b in actual),
+                }
+            })
+
+    # Check each table's overflow zone ($F3-$FF)
+    for i, (base, name) in enumerate(zip(TABLE_BASES, TABLE_NAMES)):
+        overflow_start = base + ENTRIES_PER_TABLE  # First byte past $F2
+        overflow_end = base + 0x100  # Full 256 entries would end here
+
+        # Clamp to next table or LoadProperties
+        if i + 1 < len(TABLE_BASES):
+            boundary = TABLE_BASES[i + 1]
+        else:
+            boundary = LOAD_PROPERTIES_ADDR
+        overflow_end = min(overflow_end, boundary)
+
+        if overflow_start >= overflow_end:
+            continue
+
+        for snes_addr in range(overflow_start, overflow_end):
+            pc = snes_to_pc(snes_addr, mapper)
+            if pc < 0 or pc >= len(rom_data):
+                continue
+            byte_val = rom_data[pc]
+            if byte_val != 0x00:
+                sprite_id = snes_addr - base
+                issues.append({
+                    'severity': 'error',
+                    'message': (
+                        f"Sprite table overflow: Table {i+1} ({name}) at "
+                        f"${snes_addr:06X} has value ${byte_val:02X} "
+                        f"(sprite ID ${sprite_id:02X} exceeds $F2 limit)"
+                    ),
+                    'address': snes_addr,
+                    'context': {
+                        'table': name,
+                        'table_index': i + 1,
+                        'sprite_id': f'${sprite_id:02X}',
+                        'value': f'${byte_val:02X}',
+                    }
+                })
+
+    # Also check the vanilla pointer tables for overflow
+    POINTER_TABLES = [
+        (0x069283, "Sprite Main Pointer"),
+        (0x06865B, "Sprite Prep Pointer"),
+    ]
+    for ptr_base, ptr_name in POINTER_TABLES:
+        for sprite_id in range(MAX_VALID_ID + 1, 0x100):
+            snes_addr = ptr_base + (sprite_id * 2)
+            pc = snes_to_pc(snes_addr, mapper)
+            if pc < 0 or pc + 1 >= len(rom_data):
+                continue
+            lo = rom_data[pc]
+            hi = rom_data[pc + 1]
+            word = lo | (hi << 8)
+            if word != 0x0000:
+                issues.append({
+                    'severity': 'error',
+                    'message': (
+                        f"Sprite pointer overflow: {ptr_name} table at "
+                        f"${snes_addr:06X} has value ${word:04X} "
+                        f"(sprite ID ${sprite_id:02X} exceeds $F2 limit)"
+                    ),
+                    'address': snes_addr,
+                    'context': {
+                        'table': ptr_name,
+                        'sprite_id': f'${sprite_id:02X}',
+                        'value': f'${word:04X}',
+                    }
+                })
+
+    return issues
+
+
 def scan_for_recent_changes(rom_path: Path, baseline_rom_path: Optional[Path] = None) -> list[dict]:
     """Compare ROMs to find recent changes that might cause issues."""
     changes = []
@@ -992,6 +1124,8 @@ def main():
                        help='Check hook ABI exit state and push/pull balance')
     parser.add_argument('--find-width-imbalance', action='store_true',
                        help='Find width-dependent stack imbalances (PHY/PLY with different X flag)')
+    parser.add_argument('--check-sprite-tables', action='store_true',
+                       help='Check sprite property tables for overflow past ID $F2')
     parser.add_argument('--json', action='store_true',
                        help='Output as JSON')
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -1014,7 +1148,8 @@ def main():
     # Collect diagnostics based on filters
     all_diags = []
     any_filter = any([args.check_hooks, args.find_mx, args.find_hangs,
-                      args.find_colors, args.check_abi, args.find_width_imbalance])
+                      args.find_colors, args.check_abi, args.find_width_imbalance,
+                      args.check_sprite_tables])
 
     if args.check_hooks or not any_filter:
         all_diags.extend(result.hook_violations)
@@ -1033,6 +1168,9 @@ def main():
 
     if args.find_width_imbalance or not any_filter:
         all_diags.extend(result.width_stack_imbalances)
+
+    if args.check_sprite_tables or not any_filter:
+        all_diags.extend(result.sprite_table_overflow)
 
     # Add change detection if baseline provided
     if args.baseline:
@@ -1073,6 +1211,7 @@ def main():
                 'hook_state_drift': len(result.hook_state_drift),
                 'hook_abi_issues': len(result.hook_abi_issues),
                 'width_stack_imbalances': len(result.width_stack_imbalances),
+                'sprite_table_overflow': len(result.sprite_table_overflow),
             }
         }
         print(json.dumps(output, indent=2))
@@ -1130,6 +1269,8 @@ def main():
             print(f"Hook ABI issues: {len(result.hook_abi_issues)}")
         if args.find_width_imbalance or result.width_stack_imbalances:
             print(f"Width-dependent stack imbalances: {len(result.width_stack_imbalances)}")
+        if args.check_sprite_tables or result.sprite_table_overflow:
+            print(f"Sprite table overflows: {len(result.sprite_table_overflow)}")
 
         if errors:
             return 1

@@ -1,6 +1,10 @@
 # Summary
 
 - [Introduction](./intro.md)
+- [Z3ASM Overview](./z3asm.md)
+- [Z3ASM vs Asar](./z3asm-differences.md)
+- [Asar 2.0 Compatibility](./z3asm-compat.md)
+- [Legacy Asar Manual](./legacy-asar.md)
 - [Usage](./usage.md)
     - [Standard Includes](./standard-includes.md)
     - [Standard Defines](./standard-defines.md)

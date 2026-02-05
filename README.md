@@ -26,6 +26,8 @@ cmake ..
 make
 ```
 
+If your compiler lacks C++20, disable the language server with `cmake -DZ3DK_BUILD_LSP=OFF ..`.
+
 **Executables:**
 - `build/bin/z3asm`
 - `build/bin/z3disasm`
@@ -93,6 +95,13 @@ z3disasm --rom game.sfc --symbols game.mlb --bank-start 02 --bank-end 02 --out s
 **IDE Integration:**
 - **VS Code:** Install the extension in `extensions/vscode-z3dk`.
 - **Neovim:** Configure `lspconfig` to use `z3lsp`.
+
+## Documentation
+
+- **Z3ASM overview:** `docs/newbook/src/z3asm.md`
+- **Z3ASM vs Asar:** `docs/newbook/src/z3asm-differences.md`
+- **Asar 2.0 compatibility:** `docs/newbook/src/z3asm-compat.md`
+- **Legacy Asar manual:** `docs/newbook/src/legacy-asar.md` and `docs/legacy/`
 
 ## Features over Vanilla Asar
 

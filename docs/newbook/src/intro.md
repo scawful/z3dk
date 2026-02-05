@@ -1,6 +1,13 @@
-# Asar
+# Asar (Legacy) / Z3ASM
 
 A multi-architecture SNES assembler originally written by _Alcaro_, modelled after **xkas v0.06** by _byuu_.
+
+Z3DK ships **Z3ASM**, a modern fork that preserves Asar syntax while adding
+project configuration (`z3dk.toml`), structured outputs, and IDE support.
+If you're looking for Z3ASM features, start here:
+- `z3asm.md`
+- `z3asm-differences.md`
+- `z3asm-compat.md`
 
 This manual was originally written by _RPG Hacker_ and has been extended by various contributors. If you find any issues, please report them on the GitHub repository.
 

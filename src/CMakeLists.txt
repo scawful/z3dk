@@ -8,12 +8,29 @@ project(z3dk)
 
 # here because the DLL test needs to know its value
 option(ASAR_USE_SANITIZER "Build Asar with ASan and UBSan" OFF)
+option(Z3DK_BUILD_LSP "Build z3lsp (requires C++20)" ON)
+
+include(CheckCXXCompilerFlag)
+set(Z3DK_HAS_CXX20 OFF)
+if(Z3DK_BUILD_LSP)
+	if(MSVC)
+		check_cxx_compiler_flag("/std:c++20" Z3DK_HAS_CXX20)
+	else()
+		check_cxx_compiler_flag("-std=c++20" Z3DK_HAS_CXX20)
+	endif()
+endif()
 
 add_subdirectory(z3asm)
 
 add_subdirectory(z3dk_core)
 
-add_subdirectory(z3lsp)
+if(Z3DK_BUILD_LSP)
+	if(NOT Z3DK_HAS_CXX20)
+		message(WARNING "z3lsp requires C++20; disabling (set Z3DK_BUILD_LSP=OFF to silence).")
+	else()
+		add_subdirectory(z3lsp)
+	endif()
+endif()
 
 add_subdirectory(z3disasm)
 

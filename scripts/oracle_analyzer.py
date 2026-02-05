@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -122,6 +123,9 @@ class OracleAnalysisResult:
     hook_abi_issues: list[dict]
     width_stack_imbalances: list[dict] = field(default_factory=list)
     sprite_table_overflow: list[dict] = field(default_factory=list)
+    phb_plb_issues: list[dict] = field(default_factory=list)
+    jsl_target_issues: list[dict] = field(default_factory=list)
+    rtl_rts_issues: list[dict] = field(default_factory=list)
 
     def all_diagnostics(self):
         return (
@@ -133,7 +137,10 @@ class OracleAnalysisResult:
             [AnalysisDiagnostic(**d) for d in self.hook_state_drift] +
             [AnalysisDiagnostic(**a) for a in self.hook_abi_issues] +
             [AnalysisDiagnostic(**w) for w in self.width_stack_imbalances] +
-            [AnalysisDiagnostic(**s) for s in self.sprite_table_overflow]
+            [AnalysisDiagnostic(**s) for s in self.sprite_table_overflow] +
+            [AnalysisDiagnostic(**p) for p in self.phb_plb_issues] +
+            [AnalysisDiagnostic(**j) for j in self.jsl_target_issues] +
+            [AnalysisDiagnostic(**r) for r in self.rtl_rts_issues]
         )
 
 
@@ -391,6 +398,9 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
     hook_abi_issues = check_hook_abi(tracker, labels, hooks_to_analyze, exit_expectations, hook_meta)
     width_stack_imbalances = find_width_dependent_stack_imbalance(rom_data, tracker, labels, hook_meta)
     sprite_table_overflow = find_sprite_table_overflow(rom_data)
+    phb_plb_issues = check_phb_plb_pairing(rom_data, tracker, labels)
+    jsl_target_issues = check_jsl_targets(rom_data, labels)
+    rtl_rts_issues = check_rtl_rts_consistency(tracker, labels)
 
     return OracleAnalysisResult(
         base_result=base_result,
@@ -403,6 +413,9 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
         hook_abi_issues=hook_abi_issues,
         width_stack_imbalances=width_stack_imbalances,
         sprite_table_overflow=sprite_table_overflow,
+        phb_plb_issues=phb_plb_issues,
+        jsl_target_issues=jsl_target_issues,
+        rtl_rts_issues=rtl_rts_issues,
     )
 
 
@@ -1046,6 +1059,293 @@ def find_sprite_table_overflow(rom_data: bytes, mapper: str = 'lorom') -> list[d
     return issues
 
 
+def check_phb_plb_pairing(
+    rom_data: bytes,
+    tracker: StateTracker,
+    labels: dict[int, str],
+) -> list[dict]:
+    """Check PHB/PLB pairing within routines.
+
+    Scans for PHB (0x8B) and PLB (0xAB) opcodes. Within each routine
+    (identified by RTL/RTS boundaries in the tracker's return_states),
+    verify that PHB count matches PLB count. Report errors for imbalances.
+    """
+    issues = []
+
+    for routine_start, return_list in tracker.return_states.items():
+        for ret_addr, ret_state in return_list:
+            if not ret_state.stack_ops:
+                continue
+
+            # Count PHB and PLB in this routine's stack ops (skip call/return ops)
+            phb_count = 0
+            plb_count = 0
+            for op in ret_state.stack_ops:
+                if op.opcode == 'PHB':
+                    phb_count += 1
+                elif op.opcode == 'PLB':
+                    plb_count += 1
+
+            if phb_count != plb_count:
+                routine_label = labels.get(routine_start, f"${routine_start:06X}")
+                issues.append({
+                    'severity': 'error',
+                    'message': (
+                        f"PHB/PLB imbalance in {routine_label} "
+                        f"(return at ${ret_addr:06X}): "
+                        f"PHB={phb_count}, PLB={plb_count}"
+                    ),
+                    'address': routine_start,
+                    'context': {
+                        'routine': routine_label,
+                        'return_addr': f"${ret_addr:06X}",
+                        'phb_count': phb_count,
+                        'plb_count': plb_count,
+                    }
+                })
+
+    return issues
+
+
+def check_jsl_targets(
+    rom_data: bytes,
+    labels: dict[int, str],
+) -> list[dict]:
+    """Validate JSL targets that point into Oracle banks.
+
+    For each JSL instruction (0x22) in the ROM that targets an Oracle bank
+    (banks $30-$3F based on the LoROM mapping), verify the target address
+    exists in the symbol table (labels dict). Report warnings for JSL
+    targets that are not in the symbol table (potential typos / dead code).
+    """
+    if not labels:
+        # No symbols available; skip to avoid warning spam on every JSL.
+        return []
+
+    issues = []
+    # Oracle code lives in banks $30-$3F in LoROM
+    oracle_bank_lo = 0x30
+    oracle_bank_hi = 0x3F
+
+    for pc in range(len(rom_data) - 3):
+        if rom_data[pc] != 0x22:  # JSL
+            continue
+
+        target = rom_data[pc + 1] | (rom_data[pc + 2] << 8) | (rom_data[pc + 3] << 16)
+        target_bank = (target >> 16) & 0xFF
+
+        # Only check targets in Oracle banks
+        if target_bank < oracle_bank_lo or target_bank > oracle_bank_hi:
+            continue
+
+        # Check if the target is known in the symbol table
+        if target not in labels:
+            src_addr = pc_to_snes(pc, 'lorom')
+            src_label = labels.get(src_addr, f"${src_addr:06X}")
+            issues.append({
+                'severity': 'warning',
+                'message': (
+                    f"JSL at {src_label} targets ${target:06X} "
+                    f"(Oracle bank ${target_bank:02X}) "
+                    f"but no symbol found — possible typo or dead code"
+                ),
+                'address': src_addr,
+                'context': {
+                    'target': f"${target:06X}",
+                    'target_bank': f"${target_bank:02X}",
+                    'source': src_label,
+                }
+            })
+
+    return issues
+
+
+def check_rtl_rts_consistency(
+    tracker: StateTracker,
+    labels: dict[int, str],
+) -> list[dict]:
+    """Check RTL vs RTS consistency against call type.
+
+    Using the tracker's cross_refs, find routines that are called via JSL
+    but terminate with RTS (or called via JSR but terminate with RTL).
+    Wrong return instruction corrupts the return address.
+    """
+    issues = []
+
+    # Build a map: routine_addr -> set of call kinds ('jsl', 'jsr')
+    call_kinds: dict[int, set[str]] = {}
+    for ref in tracker.cross_refs:
+        if ref.kind in ('jsl', 'jsr'):
+            if ref.to_addr not in call_kinds:
+                call_kinds[ref.to_addr] = set()
+            call_kinds[ref.to_addr].add(ref.kind)
+
+    # Build a map: routine_addr -> set of return opcodes
+    # return_states maps routine_start -> list[(ret_addr, ret_state)]
+    # We need to check the actual opcode at ret_addr
+    for routine_addr, return_list in tracker.return_states.items():
+        kinds = call_kinds.get(routine_addr, set())
+        if not kinds:
+            continue
+
+        for ret_addr, ret_state in return_list:
+            # Determine the return opcode from the last stack op
+            ret_opcode = None
+            if ret_state.stack_ops:
+                last_op = ret_state.stack_ops[-1]
+                if last_op.opcode in ('RTL', 'RTS', 'RTI'):
+                    ret_opcode = last_op.opcode
+
+            if ret_opcode is None:
+                continue
+
+            routine_label = labels.get(routine_addr, f"${routine_addr:06X}")
+
+            # JSL call but RTS return: RTS only pops 2 bytes, JSL pushed 3
+            if 'jsl' in kinds and ret_opcode == 'RTS':
+                # Find a caller address for context
+                callers = [r.from_addr for r in tracker.cross_refs
+                           if r.to_addr == routine_addr and r.kind == 'jsl']
+                caller_label = labels.get(callers[0], f"${callers[0]:06X}") if callers else "unknown"
+                issues.append({
+                    'severity': 'error',
+                    'message': (
+                        f"Routine {routine_label} called via JSL "
+                        f"(e.g. from {caller_label}) but returns with RTS — "
+                        f"return address corruption (3-byte push, 2-byte pull)"
+                    ),
+                    'address': routine_addr,
+                    'context': {
+                        'routine': routine_label,
+                        'return_addr': f"${ret_addr:06X}",
+                        'call_kind': 'jsl',
+                        'return_opcode': ret_opcode,
+                        'callers': [f"${c:06X}" for c in callers[:5]],
+                    }
+                })
+
+            # JSR call but RTL return: RTL pops 3 bytes, JSR only pushed 2
+            if 'jsr' in kinds and ret_opcode == 'RTL':
+                callers = [r.from_addr for r in tracker.cross_refs
+                           if r.to_addr == routine_addr and r.kind == 'jsr']
+                caller_label = labels.get(callers[0], f"${callers[0]:06X}") if callers else "unknown"
+                issues.append({
+                    'severity': 'error',
+                    'message': (
+                        f"Routine {routine_label} called via JSR "
+                        f"(e.g. from {caller_label}) but returns with RTL — "
+                        f"return address corruption (2-byte push, 3-byte pull)"
+                    ),
+                    'address': routine_addr,
+                    'context': {
+                        'routine': routine_label,
+                        'return_addr': f"${ret_addr:06X}",
+                        'call_kind': 'jsr',
+                        'return_opcode': ret_opcode,
+                        'callers': [f"${c:06X}" for c in callers[:5]],
+                    }
+                })
+
+    return issues
+
+
+def _get_changed_asm_files(project_root: Path) -> list[str]:
+    """Get list of ASM files changed since the last commit.
+
+    First tries staged files (git diff --cached), then falls back to
+    unstaged changes vs HEAD.
+
+    Returns a list of file paths relative to project_root.
+    """
+    try:
+        # Try staged files first
+        result = subprocess.run(
+            ['git', 'diff', '--cached', '--name-only', '--', '*.asm'],
+            capture_output=True, text=True, cwd=str(project_root),
+            timeout=10,
+        )
+        files = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
+        if files:
+            return files
+
+        # Fall back to unstaged changes vs HEAD
+        result = subprocess.run(
+            ['git', 'diff', '--name-only', 'HEAD', '--', '*.asm'],
+            capture_output=True, text=True, cwd=str(project_root),
+            timeout=10,
+        )
+        files = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
+        return files
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return []
+
+
+def _filter_diags_by_changed_files(
+    diags: list[dict],
+    changed_files: list[str],
+    labels: dict[int, str],
+) -> list[dict]:
+    """Filter diagnostics to only those whose address maps to a changed file.
+
+    Uses the symbol table to map diagnostic addresses to source file names.
+    A diagnostic passes the filter if:
+      - Its address has a label that contains a token matching a changed file's
+        stem (e.g. label 'Oracle_FishingRod_Throw' matches 'Items/fishing_rod.asm')
+      - Or the diagnostic's context contains a 'module' or 'source' key that
+        matches a changed file
+      - Or we cannot determine provenance (conservative: keep it)
+    """
+    if not changed_files:
+        return []
+
+    # Build a set of lowercase stems and full relative paths for matching
+    changed_stems = set()
+    changed_paths_lower = set()
+    for f in changed_files:
+        changed_paths_lower.add(f.lower())
+        stem = Path(f).stem.lower()
+        changed_stems.add(stem)
+        # Also add without underscores for fuzzy matching
+        changed_stems.add(stem.replace('_', ''))
+
+    filtered = []
+    for diag in diags:
+        addr = diag.get('address', 0)
+        label = labels.get(addr, '')
+        ctx = diag.get('context', {})
+
+        # Check context for module/source fields
+        module = ctx.get('module', '')
+        source = ctx.get('source', '')
+
+        keep = False
+
+        # Direct module/source match
+        for field_val in (module, source):
+            if field_val:
+                field_lower = field_val.lower()
+                if any(cp in field_lower or field_lower in cp for cp in changed_paths_lower):
+                    keep = True
+                    break
+
+        # Label-based matching: check if any changed file stem appears in the label
+        if not keep and label:
+            label_lower = label.lower().replace('_', '')
+            for stem in changed_stems:
+                if stem in label_lower:
+                    keep = True
+                    break
+
+        # If we cannot determine provenance, keep the diagnostic (conservative)
+        if not keep and not label and not module and not source:
+            keep = True
+
+        if keep:
+            filtered.append(diag)
+
+    return filtered
+
+
 def scan_for_recent_changes(rom_path: Path, baseline_rom_path: Optional[Path] = None) -> list[dict]:
     """Compare ROMs to find recent changes that might cause issues."""
     changes = []
@@ -1126,6 +1426,18 @@ def main():
                        help='Find width-dependent stack imbalances (PHY/PLY with different X flag)')
     parser.add_argument('--check-sprite-tables', action='store_true',
                        help='Check sprite property tables for overflow past ID $F2')
+    parser.add_argument('--check-phb-plb', action='store_true',
+                       help='Check PHB/PLB pairing within routines')
+    parser.add_argument('--check-jsl-targets', action='store_true',
+                       help='Validate JSL targets in Oracle banks against symbol table')
+    parser.add_argument('--check-rtl-rts', action='store_true',
+                       help='Check RTL vs RTS consistency against call type (JSL vs JSR)')
+    parser.add_argument('--strict', action='store_true',
+                       help='Treat warnings as errors (exit code 1 if any warnings)')
+    parser.add_argument('--diff', action='store_true',
+                       help='Only analyze files changed since last commit')
+    parser.add_argument('--project-root', type=Path, default=None,
+                       help=f'Oracle project root for --diff mode (default: {ORACLE_DIR})')
     parser.add_argument('--json', action='store_true',
                        help='Output as JSON')
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -1145,11 +1457,19 @@ def main():
         hooks_path=args.hooks if args.hooks.exists() else None
     )
 
+    if args.check_jsl_targets and not result.base_result.labels:
+        print(
+            "Warning: symbol file missing; skipping JSL target validation. "
+            "Provide --sym or generate a .sym file to enable it.",
+            file=sys.stderr,
+        )
+
     # Collect diagnostics based on filters
     all_diags = []
     any_filter = any([args.check_hooks, args.find_mx, args.find_hangs,
                       args.find_colors, args.check_abi, args.find_width_imbalance,
-                      args.check_sprite_tables])
+                      args.check_sprite_tables, args.check_phb_plb,
+                      args.check_jsl_targets, args.check_rtl_rts])
 
     if args.check_hooks or not any_filter:
         all_diags.extend(result.hook_violations)
@@ -1171,6 +1491,15 @@ def main():
 
     if args.check_sprite_tables or not any_filter:
         all_diags.extend(result.sprite_table_overflow)
+
+    if args.check_phb_plb or not any_filter:
+        all_diags.extend(result.phb_plb_issues)
+
+    if args.check_jsl_targets or not any_filter:
+        all_diags.extend(result.jsl_target_issues)
+
+    if args.check_rtl_rts or not any_filter:
+        all_diags.extend(result.rtl_rts_issues)
 
     # Add change detection if baseline provided
     if args.baseline:
@@ -1198,6 +1527,20 @@ def main():
                     'address': 0,
                 })
 
+    # Apply --diff filter: restrict diagnostics to changed files only
+    if args.diff:
+        diff_project_root = args.project_root or ORACLE_DIR
+        changed_files = _get_changed_asm_files(diff_project_root)
+        if changed_files:
+            print(f"Diff mode: {len(changed_files)} changed ASM file(s)", file=sys.stderr)
+            for cf in changed_files:
+                print(f"  {cf}", file=sys.stderr)
+            all_diags = _filter_diags_by_changed_files(
+                all_diags, changed_files, result.base_result.labels
+            )
+        else:
+            print("Diff mode: no changed ASM files found, showing all diagnostics", file=sys.stderr)
+
     # Output
     if args.json:
         output = {
@@ -1212,14 +1555,22 @@ def main():
                 'hook_abi_issues': len(result.hook_abi_issues),
                 'width_stack_imbalances': len(result.width_stack_imbalances),
                 'sprite_table_overflow': len(result.sprite_table_overflow),
+                'phb_plb_issues': len(result.phb_plb_issues),
+                'jsl_target_issues': len(result.jsl_target_issues),
+                'rtl_rts_issues': len(result.rtl_rts_issues),
             }
         }
+        if args.diff:
+            output['diff_mode'] = True
+            output['changed_files'] = changed_files if args.diff else []
         print(json.dumps(output, indent=2))
     else:
         print(f"\nOracle of Secrets Static Analysis")
         print("=" * 60)
         print(f"ROM: {args.rom}")
         print(f"Hooks checked: {len(result.hooks) or len(KNOWN_HOOKS)}")
+        if args.diff:
+            print(f"Diff mode: filtering to changed files only")
         print()
 
         # Group by severity
@@ -1271,8 +1622,26 @@ def main():
             print(f"Width-dependent stack imbalances: {len(result.width_stack_imbalances)}")
         if args.check_sprite_tables or result.sprite_table_overflow:
             print(f"Sprite table overflows: {len(result.sprite_table_overflow)}")
+        if args.check_phb_plb or result.phb_plb_issues:
+            print(f"PHB/PLB pairing issues: {len(result.phb_plb_issues)}")
+        if args.check_jsl_targets or result.jsl_target_issues:
+            print(f"JSL target issues: {len(result.jsl_target_issues)}")
+        if args.check_rtl_rts or result.rtl_rts_issues:
+            print(f"RTL/RTS consistency issues: {len(result.rtl_rts_issues)}")
 
         if errors:
+            return 1
+
+        # --strict: treat warnings as errors
+        if args.strict and warnings:
+            print(f"\n--strict: {len(warnings)} warning(s) treated as errors", file=sys.stderr)
+            return 1
+
+    # --strict in JSON mode: still exit 1 on warnings
+    if args.json and args.strict:
+        warnings = [d for d in all_diags if d.get('severity') == 'warning']
+        errors = [d for d in all_diags if d.get('severity') == 'error']
+        if errors or warnings:
             return 1
 
     return 0

@@ -13,6 +13,7 @@ std::string DiagnosticsToJson(const AssembleResult& result);
 std::string DiagnosticsListToJson(const std::vector<Diagnostic>& diagnostics,
                                   bool success);
 std::string HooksToJson(const AssembleResult& result, const std::string& rom_path);
+std::string AnnotationsToJson(const AssembleResult& result);
 std::string SourceMapToJson(const SourceMap& map);
 std::string SymbolsToMlb(const std::vector<Label>& labels);
 

@@ -32,17 +32,18 @@ const char* kColorCyan = "\033[1;36m";
 const char* kColorGreen = "\033[1;32m";
 const char* kColorBold = "\033[1m";
 
-struct EmitTarget {
-  enum class Kind {
-    kDiagnostics,
-    kSourceMap,
-    kSymbolsWla,
-    kSymbolsMlb,
-    kLint,
-    kHooks,
-  } kind;
-  std::string path;
-};
+  struct EmitTarget {
+    enum class Kind {
+      kDiagnostics,
+      kSourceMap,
+      kSymbolsWla,
+      kSymbolsMlb,
+      kLint,
+      kHooks,
+      kAnnotations,
+    } kind;
+    std::string path;
+  };
 
 struct CliOptions {
   std::string asm_path;
@@ -82,6 +83,7 @@ void PrintUsage(const char* name) {
       << "                                     --emit=symbols.mlb\n"
       << "                                     --emit=lint.json\n"
       << "                                     --emit=hooks.json\n"
+      << "                                     --emit=annotations.json\n"
       << "  --lint-m-width=<8|16>    Default M width for lint (bytes)\n"
       << "  --lint-x-width=<8|16>    Default X width for lint (bytes)\n"
       << "  --lint-no-unknown-width  Disable M/X unknown width warnings\n"
@@ -151,6 +153,9 @@ std::optional<EmitTarget::Kind> ParseEmitKind(const std::string& kind,
   }
   if (kind == "hooks") {
     return EmitTarget::Kind::kHooks;
+  }
+  if (kind == "annotations") {
+    return EmitTarget::Kind::kAnnotations;
   }
   return std::nullopt;
 }
@@ -750,7 +755,8 @@ int main(int argc, const char* argv[]) {
     }
     return kind == EmitTarget::Kind::kDiagnostics ||
            kind == EmitTarget::Kind::kLint ||
-           kind == EmitTarget::Kind::kHooks;
+           kind == EmitTarget::Kind::kHooks ||
+           kind == EmitTarget::Kind::kAnnotations;
   };
 
   for (const auto& emit : options.emits) {
@@ -792,6 +798,9 @@ int main(int argc, const char* argv[]) {
       }
       case EmitTarget::Kind::kHooks:
         contents = z3dk::HooksToJson(result, options.rom_path);
+        break;
+      case EmitTarget::Kind::kAnnotations:
+        contents = z3dk::AnnotationsToJson(result);
         break;
     }
     if (!z3dk::WriteTextFile(emit.path, contents, &error)) {

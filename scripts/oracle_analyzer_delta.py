@@ -193,7 +193,24 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument("--include", default="", help="Only include diagnostics whose message matches this regex")
     parser.add_argument("--exclude", default="", help="Exclude diagnostics whose message matches this regex")
+    parser.add_argument(
+        "--exclude-file",
+        type=Path,
+        default=None,
+        help="Path to a file with regex patterns to exclude (one per line, '#' comments).",
+    )
     parser.add_argument("--max", type=int, default=50, help="Max lines to print per section (default: 50)")
+    parser.add_argument(
+        "--fail-on-new",
+        action="store_true",
+        help="Exit with status 1 if any NEW diagnostics are found (after filtering).",
+    )
+    parser.add_argument(
+        "--json-summary",
+        type=Path,
+        default=None,
+        help="Optional path to write a machine-readable summary JSON (counts only).",
+    )
 
     args = parser.parse_args(argv)
 
@@ -207,6 +224,21 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     include_re = re.compile(args.include) if args.include else None
     exclude_re = re.compile(args.exclude) if args.exclude else None
+    if args.exclude_file is not None:
+        try:
+            patterns: list[str] = []
+            for line in args.exclude_file.read_text().splitlines():
+                s = line.strip()
+                if not s or s.startswith("#"):
+                    continue
+                patterns.append(s)
+            if patterns:
+                file_exclude_re = re.compile("|".join(f"(?:{p})" for p in patterns))
+                exclude_re = file_exclude_re if exclude_re is None else re.compile(
+                    f"(?:{exclude_re.pattern})|(?:{file_exclude_re.pattern})"
+                )
+        except Exception as exc:
+            raise SystemExit(f"Failed to read --exclude-file: {args.exclude_file} ({exc})")
 
     base_diags = _load_diags(args.baseline)
     cur_diags = _load_diags(args.current)
@@ -249,9 +281,34 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.only in ("resolved", "both"):
         _print_section("Resolved Diagnostics", resolved_counter)
 
+    if args.json_summary is not None:
+        summary = {
+            "baseline": str(args.baseline),
+            "current": str(args.current),
+            "filters": {
+                "only": args.only,
+                "severity": args.severity,
+                "context_keys": ctx_keys,
+                "include": args.include,
+                "exclude": args.exclude,
+                "exclude_file": str(args.exclude_file) if args.exclude_file is not None else "",
+            },
+            "counts": {
+                "baseline_total": int(sum(base_counter.values())),
+                "current_total": int(sum(cur_counter.values())),
+                "new_total": int(sum(new_counter.values())),
+                "resolved_total": int(sum(resolved_counter.values())),
+                "new_by_severity": _count_by_severity(new_counter),
+                "resolved_by_severity": _count_by_severity(resolved_counter),
+            },
+        }
+        args.json_summary.write_text(json.dumps(summary, indent=2) + "\n")
+
+    if args.fail_on_new and sum(new_counter.values()) > 0:
+        return 1
+
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

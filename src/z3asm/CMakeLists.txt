@@ -13,7 +13,7 @@ if (MSVC)
 endif()
 
 
-set (CMAKE_CXX_STANDARD 17)
+set (CMAKE_CXX_STANDARD 20)
 
 
 # This maro sets a number of properties required by both,
@@ -337,35 +337,36 @@ if (ASAR_GEN_LIB)
 endif()
 
 # Protobuf handling
-# find_package(OpenSSL CONFIG REQUIRED)
-find_package(Threads REQUIRED)
-find_package(gRPC CONFIG REQUIRED)
-find_package(Protobuf CONFIG REQUIRED)
+# Protobuf handling
+# find_package(OpenSSL REQUIRED)
+# find_package(Threads REQUIRED)
+# find_package(gRPC CONFIG REQUIRED)
+# find_package(Protobuf CONFIG REQUIRED)
 
-add_executable(zasar_server "${CMAKE_CURRENT_SOURCE_DIR}/zAsar_server.cc")
-target_link_libraries(zasar_server PRIVATE protobuf::libprotobuf gRPC::grpc++ libz3dk-static)
+# add_executable(zasar_server "${CMAKE_CURRENT_SOURCE_DIR}/zAsar_server.cc")
+# target_link_libraries(zasar_server PRIVATE protobuf::libprotobuf gRPC::grpc++ libz3dk-static)
 
-add_library(zasar_proto OBJECT "${CMAKE_CURRENT_SOURCE_DIR}/proto/zAsar.proto")
-target_link_libraries(zasar_proto PUBLIC protobuf::libprotobuf gRPC::grpc++)
-target_link_libraries(zasar_server PRIVATE zasar_proto)
+# add_library(zasar_proto OBJECT "${CMAKE_CURRENT_SOURCE_DIR}/proto/zAsar.proto")
+# target_link_libraries(zasar_proto PUBLIC protobuf::libprotobuf gRPC::grpc++)
+# target_link_libraries(zasar_server PRIVATE zasar_proto)
 
-set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-set(PROTO_IMPORT_DIRS "${CMAKE_CURRENT_LIST_DIR}/proto")
+# set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+# set(PROTO_IMPORT_DIRS "${CMAKE_CURRENT_LIST_DIR}/proto")
 
-target_include_directories(zasar_proto PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+# target_include_directories(zasar_proto PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
 
 # Proto file handling
-protobuf_generate(
-  TARGET zasar_proto
-  OUT_VAR PROTO_GENERATED_FILES
-  IMPORT_DIRS ${PROTO_IMPORT_DIRS}
-  PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+# protobuf_generate(
+#   TARGET zasar_proto
+#   OUT_VAR PROTO_GENERATED_FILES
+#   IMPORT_DIRS ${PROTO_IMPORT_DIRS}
+#   PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
 
 # gRPC service generation
-protobuf_generate(
-    TARGET zasar_proto
-    LANGUAGE grpc
-    GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
-    PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
-    IMPORT_DIRS ${PROTO_IMPORT_DIRS}
-    PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+# protobuf_generate(
+#     TARGET zasar_proto
+#     LANGUAGE grpc
+#     GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+#     PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+#     IMPORT_DIRS ${PROTO_IMPORT_DIRS}
+#     PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")

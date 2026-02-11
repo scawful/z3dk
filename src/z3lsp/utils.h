@@ -40,6 +40,14 @@ bool IsPathUnderRoot(const std::filesystem::path& path, const std::filesystem::p
 std::optional<std::filesystem::path> ResolveGitRoot(const std::filesystem::path& start_path);
 std::unordered_set<std::string> LoadGitIgnoredPaths(const std::filesystem::path& git_root);
 
+struct ReferenceLocation {
+    int line;
+    int column;
+    int length;
+};
+
+std::vector<ReferenceLocation> FindReferencesInText(const std::string& text, const std::string& token);
+
 }  // namespace z3lsp
 
 #endif  // Z3LSP_UTILS_H_

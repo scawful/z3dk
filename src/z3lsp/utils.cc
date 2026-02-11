@@ -313,4 +313,68 @@ std::unordered_set<std::string> LoadGitIgnoredPaths(const std::filesystem::path&
   return ignored;
 }
 
+std::vector<ReferenceLocation> FindReferencesInText(const std::string& text, const std::string& token) {
+  std::vector<ReferenceLocation> refs;
+  if (token.empty() || text.empty()) return refs;
+
+  int current_line = 0;
+  int current_col = 0;
+  size_t i = 0;
+  
+  while (i < text.size()) {
+      if (text[i] == '\n') {
+          current_line++;
+          current_col = 0;
+          i++;
+          continue;
+      }
+
+      // Skip comments
+      if (text[i] == ';') {
+          while (i < text.size() && text[i] != '\n') {
+              i++;
+          }
+          continue;
+      }
+      
+      // Skip strings
+      if (text[i] == '"') {
+          size_t start = i;
+          bool escaped = false;
+          i++; 
+          while (i < text.size()) {
+               if (escaped) { escaped = false; }
+               else if (text[i] == '\\') { escaped = true; }
+               else if (text[i] == '"') { break; }
+               else if (text[i] == '\n') { break; } 
+               i++;
+          }
+          int len = static_cast<int>(i - start) + 1; // +1 includes closing quote or newline/eof
+          current_col += len;
+          i++; 
+          continue;
+      }
+
+      // Check match
+      if (text[i] == token[0]) {
+           if (i + token.size() <= text.size() && text.compare(i, token.size(), token) == 0) {
+                // Determine boundaries
+                bool start_ok = (i == 0) || !IsSymbolChar(text[i-1]);
+                bool end_ok = (i + token.size() == text.size()) || !IsSymbolChar(text[i + token.size()]);
+                
+                if (start_ok && end_ok) {
+                    refs.push_back({current_line, current_col, (int)token.size()});
+                    i += token.size();
+                    current_col += (int)token.size();
+                    continue;
+                }
+           }
+      }
+      
+      i++;
+      current_col++;
+  }
+  return refs;
+}
+
 }  // namespace z3lsp

@@ -27,6 +27,7 @@
 #include "lsp_transport.h"
 #include "mesen_client.h"
 #include "parser.h"
+#include "knowledge.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -40,11 +41,24 @@ namespace z3lsp {
 json BuildDocumentSymbols(const z3lsp::DocumentState& doc);
 json BuildWorkspaceSymbols(const z3lsp::WorkspaceState& workspace, const std::string& query);
 void PublishDiagnostics(const z3lsp::DocumentState& doc);
-z3lsp::DocumentState AnalyzeDocument(const z3lsp::DocumentState& doc, const z3lsp::WorkspaceState& workspace,
-                              const std::unordered_map<std::string, z3lsp::DocumentState>* open_documents);
+z3lsp::DocumentState AnalyzeDocumentFull(const z3lsp::DocumentState& doc, const z3lsp::WorkspaceState& workspace,
+                               const std::unordered_map<std::string, z3lsp::DocumentState>* open_documents);
+
+z3lsp::DocumentState AnalyzeDocumentLight(const z3lsp::DocumentState& doc) {
+  z3lsp::DocumentState updated = doc;
+  // Lightweight Parsing: properties that can be determined from the file text alone
+  // without resolving includes or running the assembler.
+  updated.symbols = z3lsp::ParseFileText(doc.text, doc.uri).symbols;
+  
+  // We preserve the old diagnostics/labels/defines from 'doc' so they don't disappear
+  // while waiting for the heavy analysis.
+  
+  updated.BuildLookupMaps();
+  return updated;
+}
 json BuildSemanticTokens(const z3lsp::DocumentState& doc);
 std::optional<json> HandleDefinition(const z3lsp::DocumentState& doc, const json& params);
-std::optional<json> HandleHover(const z3lsp::DocumentState& doc, const json& params);
+std::optional<json> HandleHover(const z3lsp::DocumentState& doc, const z3lsp::WorkspaceState& workspace, const json& params);
 std::optional<json> HandleRename(const DocumentState& doc, WorkspaceState& workspace, 
                                  std::unordered_map<std::string, DocumentState>& documents, 
                                  const json& params);
@@ -141,9 +155,9 @@ json BuildWorkspaceSymbols(const z3lsp::WorkspaceState& workspace,
   return result;
 }
 
-z3lsp::DocumentState AnalyzeDocument(const z3lsp::DocumentState& doc,
-                              const z3lsp::WorkspaceState& workspace,
-                              const std::unordered_map<std::string, z3lsp::DocumentState>* open_documents) {
+z3lsp::DocumentState AnalyzeDocumentFull(const z3lsp::DocumentState& doc,
+                               const z3lsp::WorkspaceState& workspace,
+                               const std::unordered_map<std::string, z3lsp::DocumentState>* open_documents) {
   z3lsp::DocumentState updated = doc;
 
   z3dk::Config config;
@@ -601,45 +615,16 @@ std::optional<json> HandleRename(const DocumentState& doc, WorkspaceState& works
       
       json file_edits = json::array();
       
-      int current_line = 0;
-      int current_col = 0;
-      size_t i = 0;
-      while (i < text.size()) {
-          if (text[i] == '\n') {
-              current_line++;
-              current_col = 0;
-              i++;
-              continue;
-          }
-          
-          // Fast check for first char
-          if (text[i] == token[0]) {
-              // Check full token match
-              if (i + token.size() <= text.size() && 
-                  text.compare(i, token.size(), token) == 0) {
-                   
-                   // Check boundaries
-                   bool start_ok = (i == 0) || !z3lsp::IsSymbolChar(text[i - 1]);
-                   bool end_ok = (i + token.size() == text.size()) || !z3lsp::IsSymbolChar(text[i + token.size()]);
-                   
-                   if (start_ok && end_ok) {
-                       json edit = {
-                           {"range", {
-                               {"start", {{"line", current_line}, {"character", current_col}}},
-                               {"end", {{"line", current_line}, {"character", current_col + (int)token.size()}}}
-                           }},
-                           {"newText", new_name}
-                       };
-                       file_edits.push_back(edit);
-                       
-                       i += token.size();
-                       current_col += (int)token.size();
-                       continue;
-                   }
-              }
-          }
-          i++;
-          current_col++;
+      auto refs = z3lsp::FindReferencesInText(text, token);
+      for (const auto& ref : refs) {
+           json edit = {
+               {"range", {
+                   {"start", {{"line", ref.line}, {"character", ref.column}}},
+                   {"end", {{"line", ref.line}, {"character", ref.column + ref.length}}}
+               }},
+               {"newText", new_name}
+           };
+           file_edits.push_back(edit);
       }
       
       if (!file_edits.empty()) {
@@ -737,28 +722,7 @@ std::optional<json> HandleDefinition(const DocumentState& doc, const json& param
   return json(nullptr);
 }
 
-struct ZeldaRoutineInfo {
-  std::string name;
-  std::string description;
-  std::string expected_state;
-};
-
-const std::unordered_map<uint32_t, ZeldaRoutineInfo> kVanillaZeldaKnowledge = {
-    {0x008000, {"Reset", "ROM entry point. Initializes the CPU and starts the game engine.", "M=8, X=8"}},
-    {0x0080C9, {"NMI_Handler", "V-Blank interrupt handler. Performs DMA transfers and updates PPU registers.", "M=8, X=8"}},
-    {0x02C0C3, {"Overworld_SetCameraBounds", "Calculates the scroll boundaries for the current overworld screen based on Link's position.", "M=8, X=8"}},
-    {0x099A50, {"Ancilla_AddDamageNumber", "Spawns a damage number ancilla at the specified coordinates.", "M=8, X=8"}},
-    {0x0080B5, {"Music_PlayTrack", "Sets the current music track to be played by the APU.", "M=8, X=8"}},
-    {0x0791B3, {"Link_ReceiveItem", "Triggers the item receiving sequence for Link, including animations and inventory updates.", "M=8, X=8"}},
-    {0x028364, {"BedCutscene_ColorFix", "Initializes palette and screen state for the intro bed cutscene.", "M=8, X=8"}},
-    {0x008891, {"APU_SyncWait", "Handshake routine for APU communication. Common point for soft-locks if APU hangs.", "M=8, X=8"}},
-    {0x7E0020, {"LinkX", "Link's current X-coordinate in the room/overworld.", "RAM"}},
-    {0x7E0022, {"LinkY", "Link's current Y-coordinate in the room/overworld.", "RAM"}},
-    {0x7E036C, {"LinkHealth", "Current heart count (in halves).", "RAM"}},
-    {0x7E00A0, {"RoomIndex", "The ID of the current dungeon room.", "RAM"}},
-};
-
-std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
+std::optional<json> HandleHover(const DocumentState& doc, const WorkspaceState& workspace, const json& params) {
   if (!params.contains("textDocument") || !params.contains("position")) {
     return std::nullopt;
   }
@@ -797,8 +761,8 @@ std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
     }
 
     // Zelda Intelligence: Routine/RAM documentation
-    auto zelda_it = kVanillaZeldaKnowledge.find(label->address);
-    if (zelda_it != kVanillaZeldaKnowledge.end()) {
+    auto zelda_it = workspace.knowledge_base.find(label->address);
+    if (zelda_it != workspace.knowledge_base.end()) {
       hover_text << "\n\n**Zelda Routine:** " << zelda_it->second.name;
       hover_text << "\n\n" << zelda_it->second.description;
       hover_text << "\n\n**Expects:** " << zelda_it->second.expected_state;
@@ -839,8 +803,8 @@ std::optional<json> HandleHover(const DocumentState& doc, const json& params) {
           return hover;
       }
 
-      auto zelda_it = kVanillaZeldaKnowledge.find(addr);
-      if (zelda_it != kVanillaZeldaKnowledge.end()) {
+      auto zelda_it = workspace.knowledge_base.find(addr);
+      if (zelda_it != workspace.knowledge_base.end()) {
         std::ostringstream hover_text;
         hover_text << "**" << zelda_it->second.name << "** - $" << std::hex << std::uppercase << addr << "\n\n";
         hover_text << zelda_it->second.description << "\n\n";
@@ -1371,6 +1335,7 @@ int main(int argc, char** argv) {
       auto workspace_state = z3lsp::BuildWorkspaceState(params);
       if (workspace_state.has_value()) {
         workspace = *workspace_state;
+        z3lsp::LoadKnowledgeBase(workspace);
       }
       json capabilities = {
           {"capabilities",
@@ -1848,36 +1813,15 @@ int main(int argc, char** argv) {
               
               if (text.empty()) continue;
               
-              int current_line = 0;
-              int current_col = 0;
-              size_t i = 0;
-              while (i < text.size()) {
-                  if (text[i] == '\n') {
-                      current_line++;
-                      current_col = 0;
-                      i++;
-                      continue;
-                  }
-                  
-                  if (text[i] == token[0] && text.compare(i, token.size(), token) == 0) {
-                       bool start_ok = (i == 0) || !z3lsp::IsSymbolChar(text[i - 1]);
-                       bool end_ok = (i + token.size() == text.size()) || !z3lsp::IsSymbolChar(text[i + token.size()]);
-                       
-                       if (start_ok && end_ok) {
-                           result.push_back({
-                               {"uri", file_uri},
-                               {"range", {
-                                   {"start", {{"line", current_line}, {"character", current_col}}},
-                                   {"end", {{"line", current_line}, {"character", current_col + (int)token.size()}}}
-                               }}
-                           });
-                           i += token.size();
-                           current_col += (int)token.size();
-                           continue;
-                       }
-                  }
-                  i++;
-                  current_col++;
+              auto refs = z3lsp::FindReferencesInText(text, token);
+              for (const auto& ref : refs) {
+                   result.push_back({
+                       {"uri", file_uri},
+                       {"range", {
+                           {"start", {{"line", ref.line}, {"character", ref.column}}},
+                           {"end", {{"line", ref.line}, {"character", ref.column + ref.length}}}
+                       }}
+                   });
               }
           }
       }
@@ -1914,7 +1858,7 @@ int main(int argc, char** argv) {
       doc.path = z3lsp::UriToPath(doc.uri);
       doc.text = text_doc.value("text", "");
       doc.version = text_doc.value("version", 0);
-      doc = AnalyzeDocument(doc, workspace, &documents);
+      doc = AnalyzeDocumentFull(doc, workspace, &documents);
       documents[doc.uri] = doc;
       PublishDiagnostics(doc);
       continue;
@@ -1947,7 +1891,7 @@ int main(int argc, char** argv) {
       }
 
       // Do lightweight symbol extraction (fast) for immediate responsiveness
-      it->second.symbols = z3lsp::ParseFileText(it->second.text, it->second.uri).symbols;
+      it->second = AnalyzeDocumentLight(it->second);
       continue;
     }
 
@@ -1957,7 +1901,7 @@ int main(int argc, char** argv) {
       if (now - last_change_time > kDebounceDelay) {
         for (auto& pair : documents) {
           if (pair.second.needs_analysis) {
-            pair.second = AnalyzeDocument(pair.second, workspace, &documents);
+            pair.second = AnalyzeDocumentFull(pair.second, workspace, &documents);
             PublishDiagnostics(pair.second);
           }
         }
@@ -2026,7 +1970,7 @@ int main(int argc, char** argv) {
       };
       auto it = documents.find(uri);
       if (it != documents.end()) {
-        auto result = HandleHover(it->second, params);
+        auto result = HandleHover(it->second, workspace, params);
         if (result.has_value()) {
           response["result"] = *result;
         }

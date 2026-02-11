@@ -11,6 +11,7 @@
 #include "z3dk_core/lint.h"
 #include "z3dk_core/config.h"
 #include "z3dk_core/assembler.h"
+#include "knowledge.h"
 
 namespace z3lsp {
 
@@ -57,6 +58,7 @@ struct WorkspaceState {
   std::unordered_map<std::string, std::vector<DocumentState::SymbolEntry>> symbol_index;
   std::unordered_set<std::string> main_candidates;
   std::unordered_set<std::string> symbol_names;
+  std::unordered_map<uint32_t, KnowledgeEntry> knowledge_base;
 };
 
 struct IncludeEvent {

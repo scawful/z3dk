@@ -1,0 +1,821 @@
+[
+  {
+    "mnemonic": "ADC",
+    "full_name": "Add With Carry",
+    "description": "Add the data located at the effective address specified by the operand to the con\ntents of the accumulator; add one to the result if the carry flag is set, and store the\nfinal result in the accumulator.\nThe 65x processors have no add instruction which does not involve the carry. To\navoid adding the carry flag to the result, you must either be sure that it is already\nclear, or you must explicitly clear it (using CLC) prior to executing the ADC\ninstruction.\nIn a multi-precision (multi-word) addition, the carry should be cleared before the\nlow-order words are added; the addition of the low word will generate a new carry\nflag value based on that addition. This new value in the carry flag is added into the\nnext (middle-order or high-order) addition; each intermediate result will correctly\nreflect the carry from the previous addition.\nd flag clear; Binary addition is performed.\nd flag set; Binary coded decimal (BCD) addition is performed.\n8-bit accumulator (all processors): Data added from memory is eight-bit.\n16-bit accumulator (65802/65816 only, m = 0): Data added from memory is six\nteen-bit: the low-order eight bits are located at the effective address; the high-order\neight bits are located at the effective address plus one.",
+    "flags": "n v",
+    "flags_affected": "n v",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "AND",
+    "full_name": "And Accumulator with Memory",
+    "description": "Bitwise logical AND the data located at the effective address specified by the\noperand with the contents of the accumulator. Each bit in the accumulator is\nANDed with the corresponding bit in memory, with the result being stored in the\nrespective accumulator bit.\nThe truth table for the logical AND operation is:\nSecond Operand\n0 1\nFirst Operand\n0 0 0\n1 0 1\nFigure 18.1. AND Truth Table.\nThat is, a 1 or logical true results in a given bit being true only if both elements\nof the respective bits being ANDed are Is, or logically true.\n8-bit accumulator (all processors): Data ANDed from memory is eight-bit.\n16-bit accumulator (65802/65816 only, m = 0): Data ANDed from memory is\nsixteen-bit: the low-order byte is located at the effective address; the high-order\nbyte is located at the effective address plus one.",
+    "flags": "n",
+    "flags_affected": "n",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "ASL",
+    "full_name": "The syntax for accumulator addressing, using the  (arithmetic",
+    "description": "",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "BCC",
+    "full_name": "Branch if Carry Clear",
+    "description": "The carry flag in the P status register is tested. If it is clear, a branch is taken; if it\nis set, the instruction immediately following the two-byte BCC instruction is exe\ncuted.\nIf the branch is taken, a one-byte signed displacement, fetched from the second\nbyte of the instruction, is sign-extended to sixteen bits and added to the program\ncounter. Once the branch address has been calculated, the result is loaded into the\nprogram counter, transferring control to that location.\nThe allowable range of the displacement is 128 to +127 (from the instruction\nimmediately following the branch).\nBCC may be used in several ways: to test the result of a shift into the carry; to\ndetermine if the result of a comparison is either less than (in which case a branch\nwill be taken), or greater than or equal (which causes control to fall through the\nbranch instruction); or to determine if further operations are needed in multi-preci\nsion arithmetic.\nBecause the BCC instruction causes a branch to be taken after a comparison or\nsubtraction if the accumulator is less than the memory operand (since the carry flag\nwill always be cleared as a result), many assemblers allow an alternate mnemonic\nfor the BCC instruction: BLT, or Branch if Less Than.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode+ + Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n#o/\nBytes\n*of\nCycles\nProgram Counter Relative BCC nearlabel\n(or BLT nearlabel)\n90 X X X 2 2 u\n1 Add 1 cycle if branch is taken\n2 Add 1 more cycle if branch taken crosses page boundary on 6502, 65C02, or 65816/65802's 6502 emulation mode\n(e = 1 )"
+  },
+  {
+    "mnemonic": "BCS",
+    "full_name": "Branch if Carry Set",
+    "description": "The carry flag in the P status register is tested. If it is set, a branch is taken; if it is\nclear, the instruction immediately following the two-byte BCS instruction is exe\ncuted.\nIf the branch is taken, a one-byte signed displacement, fetched from the second\nbyte of the instruction, is sign-extended to sixteen bits and added to the program\ncounter. Once the branch address has been calculated, the result is loaded into the\nprogram counter, transferring control to that location.\nThe allowable range of the displacement is 128 to + 127 (from the instruction\nimmediately following the branch).\nBCS is used in several ways: to test the result of a shift into the carry; to deter\nmine if the result of a comparison is either greater than or equal (which causes the\nbranch to be taken) or less than; or to determine if further operations are needed in\nmulti-precision arithmetic operations.\nBecause the BCS instruction causes a branch to be taken after a comparison or\nsubtraction if the accumulator is greater than or equal to the memory operand\n(since the carry flag will always be set as a result), many assemblers allow an alter\nnate mnemonic for the BCS instruction: BGE or Branch if Greater or Equal.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# 0 /\nBytes\n# o /\nCycles\nProgram Counter Relative BCS nearlabel\n(or BGE nearlabel)\nBO X X X 2 2 1 2\n1 Add 1 cycle if branch is taken\n2 Add 1 more cycle if branch taken crosses page boundary on 6502, 65C02, or 65816/65802's 6502 emulation mode\n(e = 1 )"
+  },
+  {
+    "mnemonic": "BEQ",
+    "full_name": "Branch if Equal",
+    "description": "The zero flag in the P status register is tested. If it is set, meaning that the last\nvalue tested (which affected the zero flag) was zero, a branch is taken; if it is clear,\nmeaning the value tested was non-zero, the instruction immediately following the\ntwo-byte BEQ instruction is executed.\nIf the branch is taken, a one-byte signed displacement, fetched from the second\nbyte of the instruction, is sign-extended to sixteen bits and added to the program\ncounter. Once the branch address has been calculated, the result is loaded into the\nprogram counter, transferring control to that location.\nThe allowable range of the displacement is 128 to +127 (from the instruction\nimmediately following the branch).\nBEQ may be used in several ways: to determine if the result of a comparison is\nzero (the two values compared are equal), for example, or if a value just loaded,\npulled, shifted, incremented or decremented is zero; or to determine if further oper\nations are needed in multi-precision arithmetic operations. Because testing for\nequality to zero does not require a previous comparison with zero, it is generally\nmost efficient for loop counters to count downwards, exiting when zero is reached.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\nn of\nBytes\n# 0 /\nCycles\nProgram Counter Relative BEQ nearlabelF0 X X X 2 2 1 , 2\n1 Add 1 cycle if branch is taken\n2 Add 1 more cycle if branch taken crosses page boundary on 6502, 65C02, or 65816/65802's 6502 emulation mode\n(e = 1 )"
+  },
+  {
+    "mnemonic": "BIT",
+    "full_name": "Test Memory Bits against Accumulator",
+    "description": "BIT sets the P status register flags based on the result of two different operations,\nmaking it a dual-purpose instruction:\nFirst, it sets or clears the n flag to reflect the value of the high bit of the data\nlocated at the effective address specified by the operand, and sets or clears the v\nflag to reflect the contents of the next-to-highest bit of the data addressed.\nSecond, it logically ANDs the data located at the effective address with the con\ntents of the accumulator; it changes neither value, but sets the z flag if the result is\nzero, or clears it if the result is non-zero.\nBIT is usually used immediately preceding a conditional branch instruction: to\ntest a memory value's highest or next-to-highest bits; with a mask in the accumula\ntor, to test any bits of the memory operand; or with a constant as the mask (using\nimmediate addressing) or a mask in memory, to test any bits in the accumulator.\nAll of these tests are non-destructive of the data in the accumulator or in memory.\nWhen the BIT instruction is used with the immediate addressing mode, the n and v\nflags are unaffected.\n8-bit accumulator/memory (all processors): Data in memory is eight-bit; bit 7 is\nmoved into the n flag; bit 6 is moved into the v flag.\n16-bit accumulator/memory (65802/65816 only, m = 0): Data in memory is\nsixteen-bit: the low-order eight bits are located at the effective address; the high-\norder eight bits are located at the effective address plus one. Bit 15 is moved into\nthe n flag; bit 14 is moved into the v flag.",
+    "flags": "nv----z  - (Other than immediate addressing)\n------z  - (Immediate addressing only)\nn Takes value of most significant bit of memory data,\nv Takes value of next-to-highest bit of memory data,\nz Set if logical AND of memory and accumulator is zero; else\ncleared.",
+    "flags_affected": "nv----z  - (Other than immediate addressing)\n------z  - (Immediate addressing only)\nn Takes value of most significant bit of memory data,\nv Takes value of next-to-highest bit of memory data,\nz Set if logical AND of memory and accumulator is zero; else\ncleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex) 6502\nAvailable on:\n65C02 65802/816\n#0/\nBytes\nit of\nCycles\nImmediate BIT ttconst89 X X 2* 2}\nAbsolute BIT addr 2C X X X 3 41\nDirect Page (DP) BIT dp 24 X X X 2 3U\nAbsolute Indexed,X BIT addr.X3C X X 3 4 1 . 3\nDP Indexed,X BIT dp,X 34 X X 2 41.2\n* Add 1 byte if m = 0 (16-bit memory/accumulator)\n1 Add 1 cycle if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)\n3 Add 1 cycle if adding index crosses a page boundary"
+  },
+  {
+    "mnemonic": "BMI",
+    "full_name": "Branch if Minus",
+    "description": "The negative flag in the P status register is tested. If it is set, the high bit of the\nvalue which most recently affected the n flag was set, and a branch is taken. A\nnumber with its high bit set may be interpreted as a negative two's-complement\nnumber, so this instruction tests, among other things, for the sign of two's-comple\nment numbers. If the negative flag is clear, the high bit of the value which most\nrecently affected the flag was clear, or, in the two's-complement system, was a pos\nitive number, and the instruction immediately following the two-byte BMI instruc\ntion is executed.\nIf the branch is taken, a one-byte signed displacement, fetched from the second\nbyte of the instruction, is sign-extended to sixteen bits and added to the program\ncounter. Once the branch address has been calculated, the result is loaded into the\nprogram counter, transferring control to that location.\nThe allowable range of the displacement is - 128 to + 127 (from the instruction\nimmediately following the branch).\nBMI is primarily used to either determine, in two's-complement arithmetic, if a\nvalue is negative or, in logic situations, if the high bit of the value is set. It can also\nbe used when looping down through zero (the loop counter must have a positive\ninitial value) to determine if zero has been passed and to effect an exit from the\nloop.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\nn of\nBytes\nU of\nCycles\nProgram Counter Relative BMI nearlabel30 X X X 2 21 , 2\n1 Add 1 cycle if branch is taken\n2 Add 1 more cycle if branch taken crosses page boundary on 6502, 65C02, or 65816/65802's 6502 emulation mode\n(e = 1 )"
+  },
+  {
+    "mnemonic": "BNE",
+    "full_name": "Branch if Not Equal",
+    "description": "The zero flag in the P status register is tested. If it is clear (meaning the value just\ntested is non-zero), a branch is taken; if it is set (meaning the value tested is zero),\nthe instruction immediately following the two-byte BNE instruction is executed.\nIf the branch is taken, a one-byte signed displacement, fetched from the second\nbyte of the instruction, is sign-extended to sixteen bits and added to the program\ncounter. Once the branch address has been calculated, the result is loaded into the\nprogram counter, transferring control to that location.\nThe allowable range of the displacement is 128 to +127 (from the instruction\nimmediately following the branch).\nBNE may be used in several ways: to determine if the result of a comparison is\nnon-zero (the two values compared are not equal), for example, or if the value just\nloaded or pulled from the stack is non-zero, or to determine if further operations\nare needed in multi-precision arithmetic operations.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\nHof\nBytes\nHof\nCycles\nProgram Counter Relative BNE nearlabelDO X X X 2 21.2\n1 Add 1 cycle if branch is taken\n2 Add 1 more cycle if branch taken crosses page boundary on 6502, 65C02, or 65816/65802's 6502 emulation mode\n(e = 1 )"
+  },
+  {
+    "mnemonic": "BPL",
+    "full_name": "Branch if Plus",
+    "description": "The negative flag in the P status register is tested. If it is clearmeaning that the\nlast value which affected the zero flag had its high bit cleara branch is taken. In\nthe two's-complement system, values with their high bit clear are interpreted as\npositive numbers. If the flag is set, meaning the high bit of the last value was set,\nthe branch is not taken; it is a two's-complement negative number, and the instruc\ntion immediately following the two-byte BPL instruction is executed.\nIf the branch is taken, a one-byte signed displacement, fetched from the second\nbyte of the instruction, is sign-extended to sixteen bits and added to the program\ncounter. Once the branch address has been calculated, the result is loaded into the\nprogram counter, transferring control to that location.\nThe allowable range of the displacement is 128 to -I-127 (from the instruction\nimmediately following the branch).\nBPL is used primarily to determine, in two's-complement arithmetic, if a value is\npositive or not or, in logic situations, if the high bit of the value is clear.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n#o/\nBytes\n# of\nCycles\nProgram Counter Relative BPL nearlabel10 X X X 2 21,2\n1 Add 1 cycle if branch is taken\n2 Add 1 more cycle if branch taken crosses page boundary on 6502, 65C02, or 65816/65802's 6502 emulation mode\n(e = 1 )"
+  },
+  {
+    "mnemonic": "BRA",
+    "full_name": "Branch Always",
+    "description": "A branch is always taken, and no testing is done: in effect, an unconditional JMP\nis executed, but since signed displacements are used, the instruction is only two\nbytes, rather than the three bytes of a JMP. Additionally, using displacements from\nthe program counter makes the BRA instruction relocatable. Unlike a JMP instruc\ntion, the BRA is limited to targets that lie within the range of the one-byte signed\ndisplacement of the conditional branches: 128 to + 127 bytes from the first byte\nfollowing the BRA instruction.\nTo branch, a one-byte signed displacement, fetched from the second byte of the\ninstruction, is sign-extended to sixteen bits and added to the program counter.\nOnce the branch address has been calculated, the result is loaded into the program\ncounter, transferring control to that location.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available on:# of # of\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nProgram Counter Relative BRA nearlabel80 X X 2 3\n1 Add 1 cycle if branch crosses page boundary on 65C02 or in 65816/65802's 6502 emulation mode (e = 1)"
+  },
+  {
+    "mnemonic": "BRK",
+    "full_name": "similar to LIST, and additionally sets up the  vectors, so they can",
+    "description": "",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "BRL",
+    "full_name": "Branch Always Long",
+    "description": "A branch is always taken, similar to the BRA instruction. However, BRL is a\nthree-byte instruction; the two bytes immediately following the opcode form a\nsixteen-bit signed displacement from the program counter. Once the branch address\nhas been calculated, the result is loaded into the program counter, transferring con\ntrol to that location.\nThe allowable range of the displacement is anywhere within the current 64K pro\ngram bank.\nThe long branch provides an unconditional transfer of control similar to the JMP\ninstruction, with one major advantage: the branch instruction is relocatable while\njump instructions are not. However, the (non-relocatable) jump absolute instruc\ntion executes one cycle faster.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n#0/\nBytes\n#0/\nCycles\nProgram Counter Relative Long BRL label 82 X 3 4"
+  },
+  {
+    "mnemonic": "BVC",
+    "full_name": "Branch if Overflow Clear",
+    "description": "The overflow flag in the P status register is tested. If it is clear, a branch is taken;\nif it is set, the instruction immediately following the two-byte BVC instruction is\nexecuted.\nIf the branch is taken, a one-byte signed displacement, fetched from the second\nbyte of the instruction, is sign-extended to sixteen bits and added to the program\ncounter. Once the branch address has been calculated, the result is loaded into the\nprogram counter, transferring control to that location.\nThe allowable range of the displacement is 128 to -1-127 (from the instruction\nimmediately following the branch).\nThe overflow flag is altered by only four instructions on the 6502 and 65C02\naddition, subtraction, the CLV clear-the-flag instruction, and the BIT bit-testing\ninstruction. In addition, all the flags are restored from the stack by the PLP and\nRTI instructions. On the 65802/65816, however, the SEP and REP instructions can\nalso modify the v flag.\nBVC is used almost exclusively to check that a two's-complement arithmetic cal\nculation has not overflowed, much as the carry is used to determine if an unsigned\narithmetic calculation has overflowed. (Note, however, that the compare instruc\ntions do not affect the overflow flag.) You can also use BVC to test the second\nhighest bit in a value by using it after the BIT instruction, which moves the second-\nhighest bit of the tested value into the v flag.\nThe overflow flag can also be set by the Set Overflow hardware signal on the\n6502, 65C02, and 65802; on many systems, however, there is no connection to this\npin.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\nn of\nBytes\n# of\nCycles\nProgram Counter Relative BVC nearlabel50 XX X 2 212\n1 Add 1 cycle if branch is taken\n2 Add 1 more cycle if branch taken crosses page boundary on 6502, 65C02, or 65816/65802's 6502 emulation mode\n(e = 1 )"
+  },
+  {
+    "mnemonic": "BVS",
+    "full_name": "Branch if Overflow Set",
+    "description": "The overflow flag in the P status register is tested. If it is set, a branch is taken; if\nit is clear, the instruction immediately following the two-byte BVS instruction is\nexecuted.\nIf the branch is taken, a one-byte signed displacement, fetched from the second\nbyte of the instruction, is sign-extended to sixteen bits and added to the program\ncounter. Once the branch address has been calculated, the result is loaded into the\nprogram counter, transferring control to that location.\nThe allowable range of the displacement is 128 to + 127 (from the instruction\nimmediately following the branch).\nThe overflow flag is altered by only four instructions on the 6502 and 65C02\naddition, subtraction, the CLV clear-the-flag instruction, and the BIT bit-testing\ninstruction. In addition, all the flags are restored from the stack by the PLP and\nRTI instructions. On the 65802/65816, the SEP and REP instructions can also mod\nify the v flag.\nBVS is used almost exclusively to determine if a two's-complement arithmetic\ncalculation has overflowed, much as the carry is used to determine if an\nunsigned arithmetic calculation has overflowed. (Note, however, that the compare\ninstructions do not affect the overflow flag.) You can also use BVS to test the\nsecond-highest bit in a value by using it after the BIT instruction, which moves the\nsecond-highest bit of the tested value into the v flag.\nThe overflow flag can also be set by the Set Overflow hardware signal on the\n6502, 65C02, and 65802; on many systems, however, there is no hardware connec\ntion to this signal.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode Available on:\n(hex) 6502 65C02 65802/816\nHof\nBytes\nHof\nCycles\nProgram Counter Relative BVS nearlabel70 x x x 2 21-2\n1 Add 1 cycle if branch is taken\n2 Add 1 more cycle if branch taken crosses page boundary on 6502, 65C02, or 65816/65802's 6502 emulation mode\n(e = 1 )"
+  },
+  {
+    "mnemonic": "CLC",
+    "full_name": "Clear Carry Flag",
+    "description": "Clear the carry flag in the status register.\nCLC is used prior to addition (using the 65x's ADC instruction) to keep the carry\nflag from affecting the result; prior to a BCC (branch on carry clear) instruction on\nthe 6502 to force a branch-always; and prior to an XCE (exchange carry flag with\nemulation bit) instruction to put the 65802 or 65816 into native mode.",
+    "flags": "-----------------c\nc carry flag cleared always.",
+    "flags_affected": "-----------------c\nc carry flag cleared always.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n#0/\nBytes\n#0/\nCycles\nImplied CLC 18 XX X 1 2"
+  },
+  {
+    "mnemonic": "CLD",
+    "full_name": "Clear Decimal Mode Flag",
+    "description": "Clear the decimal mode flag in the status register.\nCLD is used to shift 65x processors back into binary mode from decimal mode,\nso that the ADC and SBC instructions will correctly operate on binary rather than\nBCD data.",
+    "flags": "d-------\nd decimal mode flag cleared always.",
+    "flags_affected": "d-------\nd decimal mode flag cleared always.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available on:# 0 / # 0 /\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nImplied CLD D 8 X X X 1 2"
+  },
+  {
+    "mnemonic": "CLI",
+    "full_name": "Clear Interrupt Disable Flag",
+    "description": "Clear the interrupt disable flag in the status register.\nCLI is used to re-enable hardware interrupt (IRQ) processing. (When the i bit is\nset, hardware interrupts are ignored.) The processor itself sets the i flag when it\nbegins servicing an interrupt, so interrupt handling routines must re-enable inter\nrupts with CLI if the interrupt-service routine is designed to service interrupts that\noccur while a previous interrupt is still being handled; otherwise, the RTI instruc\ntion will restore a clear i flag from the stack, and CLI is not necessary. CLI is also\nused to re-enable interrupts if they have been disabled during the execution of\ntime-critical or other code which cannot be interrupted.",
+    "flags": "----------------i \ni interrupt disable flag cleared always.",
+    "flags_affected": "----------------i \ni interrupt disable flag cleared always.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\nn of\nBytes\n# o /\nCycles\nImplied CLI 58 XX X 1 2"
+  },
+  {
+    "mnemonic": "CLV",
+    "full_name": "Clear Overflow Flag",
+    "description": "Clear the overflow flag in the status register.\nCLV is sometimes used prior to a BVC (branch on overflow clear) to force a\nbranch-always on the 6502. Unlike the other clear flag instructions, there is no\ncomplementary \"set flag\" instruction to set the overflow flag, although the over\nflow flag can be set by hardware via the Set Overflow input pin on the processor.\nThis signal, however, is often unconnected. The 65802/65816 REP instruction can,\nof course, clear the overflow flag; on the 6502 and 65C02, a BIT instruction with a\nmask in memory that has bit 6 set can be used to set the overflow flag.",
+    "flags": "- v\n---------------\nv overflow flag cleared always.",
+    "flags_affected": "- v\n---------------\nv overflow flag cleared always.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\nIt of\nBytes\n* of\nCycles\nImplied CLV B 8 XX X 1 2"
+  },
+  {
+    "mnemonic": "CMP",
+    "full_name": "Compare Accumulator with Memory",
+    "description": "Subtract the data located at the effective address specified by the operand from\nthe contents of the accumulator, setting the carry, zero, and negative flags based on\nthe result, but without altering the contents of either the memory location or the\naccumulator. That is, the result is not saved. The comparison is of unsigned binary\nvalues only.\nThe CMP instruction differs from the SBC instruction in several ways. First, the\nresult is not saved. Second, the value in the carry prior to the operation is irrele\nvant to the operation; that is, the carry does not have to be set prior to a compare\nas it is with 65x subtractions. Third, the compare instruction does not set the over\nflow flag, so it cannot be used for signed comparisons. Although decimal mode\ndoes not affect the CMP instruction, decimal comparisons are effective, since the\nequivalent binary values maintain the same magnitude relationships as the decimal\nvalues have, for example, $99 > $04 just as 99 > 4.\nThe primary use for the compare instruction is to set the flags so that a condi\ntional branch can then be executed.\n8-bit accumulator (all processors); Data compared is eight-bit.\n16-bit accumulator (65802/65816 only, m = 0): Data compared is sixteen-bit: the\nlow-order eight bits of the data in memory are located at the effective address; the\nhigh-order eight bits are located at the effective address plus one.",
+    "flags": "n",
+    "flags_affected": "n",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "COP",
+    "full_name": "essing, such as by a floating point processor. When the  instruction",
+    "description": "",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "CPX",
+    "full_name": "Compare Index Register X with Memory",
+    "description": "Subtract the data located at the effective address specified by the operand from\nthe contents of the X register, setting the carry, zero, and negative flags based on\nthe result, but without altering the contents of either the memory location or the\nregister. The result is not saved. The comparison is of unsigned values only (except\nfor signed comparison for equality).\nThe primary use for the CPX instruction is to test the value of the X index regis\nter against loop boundaries, setting the flags so that a conditional branch can be\nexecuted.\n8-bit index registers (all processors): Data compared is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Data compared is sixteen-bit:\nthe low-order eight bits of the data in memory are located at the effective address;\nthe high-order eight bits are located at the effective address plus one.",
+    "flags": "n\n--------------zc\nn Set if most significant bit of result is set; else cleared.\nz Set if result is zero; else cleared.\nc Set if no borrow required (X register value higher or same);\ncleared if borrow required (X register value lower).",
+    "flags_affected": "n\n--------------zc\nn Set if most significant bit of result is set; else cleared.\nz Set if result is zero; else cleared.\nc Set if no borrow required (X register value higher or same);\ncleared if borrow required (X register value lower).",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)6502\nAvailable on:\n65C02 65802/816\nU of\nBytes\n# 0 /\nCycles\nImmediate CPX ttconstE0 X X X 2* 2'\nAbsolute CPX addr EC X X X 3 41\nDirect Page (also DP) CPX dp E4 X X X 2 312\nAdd 1 byte if x = 0 (16-bit index registers)\n1 Add 1 cycle if x = 0 (16-bit index registers)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)"
+  },
+  {
+    "mnemonic": "CPY",
+    "full_name": "Compare Index Register Y with Memory",
+    "description": "Subtract the data located at the effective address specified by the operand from\nthe contents of the Y register, setting the carry, zero, and negative flags based on\nthe result, but without altering the contents of either the memory location or the\nregister. The comparison is of unsigned values only (except for signed comparison\nfor equality).\nThe primary use for the CPY instruction is to test the value of the Y index regis\nter against loop boundaries, setting the flags so that a conditional branch can be\nexecuted.\n8-bit index registers (all processors): Data compared is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Data compared is sixteen-bit:\nthe low-order eight bits of the data in memory is located at the effective address;\nthe high-order eight bits are located at the effective address plus one.",
+    "flags": "n--------------zc\nn Set if most significant bit of result is set; else cleared.\nz Set if result is zero; else cleared.\nc Set if no borrow required (Y register value higher or same);\ncleared if borrow required (Y register value lower).",
+    "flags_affected": "n--------------zc\nn Set if most significant bit of result is set; else cleared.\nz Set if result is zero; else cleared.\nc Set if no borrow required (Y register value higher or same);\ncleared if borrow required (Y register value lower).",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode+ + Syntax\nOpcode\n(hex) 6502\nAvailable on:\n65C02 65802/816\nn of\nBytes\nHof\nCycles\nImmediate CPY ttconstCO X X X 2* 21\nAbsolute CPY addr CC X X X 3 4 1\nDirect Page (also DP) CPY dp C4 X X X 2 312\n* Add 1 byte if x = 0 (16-bit index registers)\n1 Add 1 cycle if x = 0 (16-bit index registers)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)"
+  },
+  {
+    "mnemonic": "DEC",
+    "full_name": "Decrement",
+    "description": "Decrement by one the contents of the location specified by the operand (subtract\none from the value).\nUnlike subtracting a one using the SBC instruction, the decrement instruction is\nneither affected by nor affects the carry flag. You can test for wraparound only by\ntesting after every decrement to see if the value is zero or negative. On the other\nhand, you don't need to set the carry before decrementing.\nDEC is unaffected by the setting of the d (decimal) flag.\n8-bit accumulator/memory (all processors): Data decremented is eight-bit.\n16-bit accumulator/memory (65802/65816 only, m = 0): Data decremented is\nsixteen-bit: if in memory, the low-order eight bits are located at the effective\naddress; the high-order eight bits are located at the effective address plus one.",
+    "flags": "n  z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex) 6502\nAvailable on:\n65C02 65802/816\n#o/\nBytes\n#o/\nCycles\nAccumulator DEC A 3A X X 1 2\nAbsolute DEC addr CE X X X 3 61\nDirect Page (also DP) DEC dp C 6 X X X 2 51,2\nAbsolute Indexed,X DEC addr,X DE X X X 3 71,3\nDP Indexed, X DEC dp,X D 6 X X X 2 61,2\n1 Add 2 cycles if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)\n3 Subtract 1 cycle if 65C02 and no page boundary crossed"
+  },
+  {
+    "mnemonic": "DEX",
+    "full_name": "Decrement Index Register X",
+    "description": "Decrement by one the contents of index register X (subtract one from the value).\nThis is a special purpose, implied addressing form of the DEC instruction.\nUnlike using SBC to subtract a one from the value, the DEX instruction does not\naffect the carry flag; you can test for wraparound only by testing after every decre\nment to see if the value is zero or negative. On the other hand, you don't need to\nset the carry before decrementing.\nDEX is unaffected by the setting of the d (decimal) flag.\n8-bit index registers (all processors): Data decremented is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Data decremented is sixteen-bit.",
+    "flags": "n--------------z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "flags_affected": "n--------------z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# 0 /\nBytes\n# of\nCycles\nImplied DEX CA X X X 1 2"
+  },
+  {
+    "mnemonic": "DEY",
+    "full_name": "Decrement Index Register Y",
+    "description": "Decrement by one the contents of index register Y (subtract one from the value).\nThis is a special purpose, implied addressing form of the DEC instruction.\nUnlike using SBC to subtract a one from the value, the DEY instruction does not\naffect the carry flag; you can test for wraparound only by testing after every decre\nment to see if the value is zero or negative. On the other hand, you don't need to\nset the carry before decrementing.\nDEY is unaffected by the setting of the d (decimal) flag.\n8-bit index registers (all processors): Data decremented is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Data decremented is sixteen-bit.",
+    "flags": "n z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "flags_affected": "n z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# 0 /\nBytes\nn of\nCycles\nImplied DEY 8 8 X X X 1 2"
+  },
+  {
+    "mnemonic": "EOR",
+    "full_name": "Exclusive-OR Accumulator with Memory",
+    "description": "Bitwise logical Exclusive-OR the data located at the effective address specified by\nthe operand with the contents of the accumulator. Each bit in the accumulator is\nexclusive-ORed with the corresponding bit in memory, and the result is stored into\nthe same accumulator bit.\nThe truth table for the logical exclusive-OR operation is:\nSeco n d O perand\n0 1\nFirst O perand\n0 0 1\n1 1 0\nFigure 18.5. Exclusive OR Truth Table.\nA 1 or logical true results only if the two elements of the Exclusive-OR operation\nare different.\n8-bit accumulator (all processors): Data exclusive-ORed from memory is eight-\nbit.\n16-bit accumulator (65802/65816 only, m = 0): Data exclusive-ORed from mem\nory is sixteen-bit: the low-order eight bits are located at the effective address; the\nhigh-order eight bits are located at the effective address plus one.",
+    "flags": "n",
+    "flags_affected": "n",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "INC",
+    "full_name": "Increment",
+    "description": "Increment by one the contents of the location specified by the operand (add one\nto the value).\nUnlike adding a one with the ADC instruction, however, the increment instruc\ntion is neither affected by nor affects the carry flag. You can test for wraparound\nonly by testing after every increment to see if the result is zero or positive. On the\nother hand, you don't have to clear the carry before incrementing.\nThe INC instruction is unaffected by the d (decimal) flag.\n8-bit accumulator/memory (all processors): Data incremented is eight-bit.\n16-bit accumulator/memory (65802/65816 only, m = 0): Data incremented is\nsixteen-bit: if in memory, the low-order eight bits are located at the effective\naddress; the high-order eight-bits are located at the effective address plus one.",
+    "flags": "n z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "flags_affected": "n z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex) 6502\nAvailable on:\n65C02 65802/816\n# 0 /\nBytes\nIt of\nCycles\nAccumulator INC A 1A X X 1 2\nAbsolute INC addr EE X X X 3 61\nDirect Page (also DP) INC dp E6 X X X 2 51,2\nAbsolute Indexed,X 1UC addr,X FE X X X 3 y l , 3\nDP Indexed,X INC dp,X F6 X X X 2 61,2\n1 Add 2 cycles if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)\n3 Subtract 1 cycle if 65C02 and no page boundary crossed"
+  },
+  {
+    "mnemonic": "INX",
+    "full_name": "Increment Index Register X",
+    "description": "Increment by one the contents of index register X (add one to the value). This is a\nspecial purpose, implied addressing form of the INC instruction.\nUnlike using ADC to add a one to the value, the INX instruction does not affect\nthe carry flag. You can execute it without first clearing the carry. But you can test\nfor wraparound only by testing after every increment to see if the result is zero or\npositive. The INX instruction is unaffected by the d (decimal) flag.\n8-bit index registers (all processors): Data incremented is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Data incremented is sixteen-bit.",
+    "flags": "n-------------z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "flags_affected": "n-------------z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# 0 /\nBytes\nn of\nCycles\nImplied INX E8 X X X 1 2"
+  },
+  {
+    "mnemonic": "INY",
+    "full_name": "Increment Index Register Y",
+    "description": "Increment by one the contents of index register Y (add one to the value). This is a\nspecial purpose, implied addressing form of the INC instruction.\nUnlike using ADC to add one to the value, the INY instruction does not affect\nthe carry flag. You can execute it without first clearing the carry. But you can test\nfor wraparound only by testing after every increment to see if the value is zero or\npositive. The INY instruction is unaffected by the d (decimal) flag.\n8-bit index registers (all processors): Data incremented is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Data incremented is sixteen-bit.",
+    "flags": "n  z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# of\nBytes\nn of\nCycles\nImplied INY C 8 XX X 1 2"
+  },
+  {
+    "mnemonic": "JMP",
+    "full_name": "Jump",
+    "description": "Transfer control to the address specified by the operand field.\nThe program counter is loaded with the target address. If a long JMP is executed,\nthe program counter bank is loaded from the third byte of the target address speci\nfied by the operand.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode+ + Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# of\nBytes\n# of\nCycles\nAbsolute JMP addr 4C X X X 3 3\nAbsolute Indirect JMP (addr) 6C X X X 3 51,2\nAbsolute Indexed Indirect JMP (addr.X)7C X X 3 6\nAbsolute Long JMP long\n(or JML long)\n5C X 4 4\nAbsolute Indirect Long JMP [addr]\n(or JML [addr])\nDC X 3 6\n1 Add 1 cycle if 65C02\n2 6502: If low byte of addr is $FF (i.e., addr is SxxFF): yields incorrect result"
+  },
+  {
+    "mnemonic": "JSL",
+    "full_name": "Jump to Subroutine Long (Inter-Bank)",
+    "description": "Jump-to-subroutine with long (24-bit) addressing: transfer control to the subrou\ntine at the 24-bit address which is the operand, after first pushing a 24-bit (long)\nreturn address onto the stack. This return address is the address of the last instruc\ntion byte (the fourth instruction byte, or the third operand byte), not the address of\nthe next instruction; it is the return address minus one.\nThe current program counter bank is pushed onto the stack first, then the high-\norder byte of the return address and then the low-order byte of the address are\npushed on the stack in standard 65x order (low byte in the lowest address, bank\nbyte in the highest address). The stack pointer is adjusted after each byte is pushed\nto point to the next lower byte (the next available stack location). The program\ncounter bank register and program counter are then loaded with the operand val\nues, and control is transferred to the specified location.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode Available to:\n(hex) 6502 65C02 65802/816\nnof Hof\nBytes Cycles\nAbsolute Long JSL long\n(or JSR long)\n22 x 4 8"
+  },
+  {
+    "mnemonic": "JSR",
+    "full_name": "Jump to Subroutine",
+    "description": "Transfer control to the subroutine at the location specified by the operand, after\nfirst pushing onto the stack, as a return address, the current program counter\nvalue, that is, the address of the last instruction byte (the third byte of a three-byte\ninstruction, the fourth byte of a four-byte instruction), not the address of the next\ninstruction.\nIf an absolute operand is coded and is less than or equal to $FFFF, absolute\naddressing is assumed by the assembler; if the value is greater than $FFFF, absolute\nlong addressing is used.\nIf long addressing is used, the current program counter bank is pushed onto the\nstack first. Nextor first in the more normal case of intra-bank addressingthe\nhigh order byte of the return address is pushed, followed by the low order byte.\nThis leaves it on the stack in standard 65x order (lowest byte at the lowest address,\nhighest byte at the highest address). After the return address is pushed, the stack\npointer points to the next available location (next lower byte) on the stack. Finally,\nthe program counter (and, in the case of long addressing, the program counter\nbank register) is loaded with the values specified by the operand, and control is\ntransferred to the target location.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0 / # 0 /\nBytes Cycles\nAbsolute JSR addr 2 0 XX X 3 6\nAbsolute Indexed Indirect JSR (addr.X) FC X 3 8\nAbsolute Long JSR long\n(or JSL long)\n2 2 X 4 8"
+  },
+  {
+    "mnemonic": "LDA",
+    "full_name": "Load Accumulator from Memory",
+    "description": "Load the accumulator with the data located at the effective address specified by\nthe operand.\n8-bit accumulator (all processors): Data is eight-bit.\n16-bit accumulator (65802/65816 only, m = 0): Data is sixteen-bit; the low-order\neight bits are located at the effective address; the high-order eight bits are located at\nthe effective address plus one.",
+    "flags": "n  z -\nn Set if most significant bit of loaded value is set; else cleared,\nz Set if value loaded is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of loaded value is set; else cleared,\nz Set if value loaded is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode* * Syntax\nOpcode\n(hex) 6502\nAvailable to:\n65C02 65802/816\n#o/\nBytes\nHof\nCycles\nImmediate LDA UconstA9 X X X 2* 2)\nAbsolute LDA addr AD X X X 3 4 1\nAbsolute Long LDA long AF X 4 5 1\nDirect Page (also DP) LDA dp A5 X X X 2 31,2\nDP Indirect LDA (dp) B2 X X 2 51-2\nDP Indirect Long LDA [dp] A 7 X 2 61,2\nAbsolute Indexed,X LDA addr,XBD X X X 3 41.3\nAbsolute Long Indexed,X LDA long,XBF X 4 5 1\nAbsolute Indexed, Y LDA addr,Y B9 X X X 3 41.3\nDP Indexed,X LDA dp,X B5 X X X 2 41.2\nDP Indexed Indirect,X LDA (dp,X) A1 X X X 2 6 1 , 2\nDP Indirect Indexed,Y LDA (dp),Y Bl X X X 2 5U .3\nDP Indirect Long Indexed,Y LDA [dp],Y B7 X 2 6 1 , 2\nStack Relative (also SR) LDA sr,S A3 X 2 41\nSR Indirect Indexed,Y LDA (sr,S),Y B3 X 2 71\n+ +LDA, a Primary Group Instruction, has available all of the Primary Group addressing modes and bit patterns\n* Add 1 byte if m = 0 (16-bit memory/accumulator)\n1 Add 1 cycle if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)\n3 Add 1 cycle if adding index crosses a page boundary"
+  },
+  {
+    "mnemonic": "LDX",
+    "full_name": "Load Index Register X from Memory",
+    "description": "Load index register X with the data located at the effective address specified by\nthe operand.\n8-bit index registers (all processors): Data is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Data is sixteen-bit: the low-\norder eight bits are located at the effective address; the high-order eight bits are\nlocated at the effective address plus one.",
+    "flags": "n  z -\nn Set if most significant bit of loaded value is set; else cleared,\nz Set if value loaded is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of loaded value is set; else cleared,\nz Set if value loaded is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)6502\nAvailable to:\n65C02 65802/816\n#0/\nBytes\n# of\nCycles\nImmediate LDX ttconstA2 X X X 2* 2}\nAbsolute LDX addr AE X X X 3 4 1\nDirect Page (also DP) LDX dp A 6 X X X 2 3U\nAbsolute Indexed,Y LDX addr,Y BE X X X 3 4 1 . 3\nDP Indexed,Y LDX dp,Y B6 X X X 2 41.2\nAdd 1 byte if x = 0 (16-bit index registers)\n1 Add 1 cycle if x = 0 (16-bit index registers)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL < > 0)\n3 Add 1 cycle if adding index crosses a page boundary"
+  },
+  {
+    "mnemonic": "LDY",
+    "full_name": "Load Index Register Y from Memory",
+    "description": "Load index register Y with the data located at the effective address specified by\nthe operand.\n8-bit index registers (all processors): Data is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Data is sixteen-bit: the low-\norder eight bits are located at the effective address; the high-order eight bits are\nlocated at the effective address plus one.",
+    "flags": "n  z -\nn Set if most significant bit of loaded value is set; else cleared,\nz Set if value loaded is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of loaded value is set; else cleared,\nz Set if value loaded is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)6502\nAvailable to:\n65C02 65802/816\nHof\nBytes\nHof\nCycles\nImmediate LDY Hconst AO x X X 2* 21\nAbsolute LDY addr AC X X X 3 41\nDirect Page (also DP) LDY dp A4 X X X 2 3U\nAbsolute Indexed, X LDY addr,X BC X X X 3 41.3\nDP Indexed,X LDY dp,X B4 X X X 2 41.2\n* Add 1 byte if x = 0 (16-bit index registers)\n1 Add 1 cycle if x = 0 (16-bit index registers)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)\n3 Add 1 cycle if adding index crosses a page boundary"
+  },
+  {
+    "mnemonic": "LSR",
+    "full_name": "Logical Shift Memory or Accumulator Right",
+    "description": "Logical shift the contents of the location specified by the operand right one bit.\nThat is, bit zero takes on the value originally found in bit one, bit one takes the\nvalue originally found in bit two, and so on; the leftmost bit (bit 7 if the m memory\nselect flag is one when the instruction is executed or bit 15 if it is zero) is cleared;\nthe rightmost bit, bit zero, is transferred to the carry flag. This is the arithmetic\nequivalent of unsigned division by two.\nr r m n n r\nCarry Flag\nFigure 18.6. LSR.\n8-bit accumulator/memory (all processors): Data shifted is eight-bit.\n16-bit accumulator/memory (65802/65816 only, m = 0): Data shifted is sixteen-\nbit: if in memory, the low-order eight bits are located at the effective address; the\nhigh-order eight bits are located at the effective address plus one.",
+    "flags": "n--------------zc\nn Cleared.\nz Set if result is zero; else cleared.\nc Low bit becomes carry: set if low bit was set; cleared if low bit was\nzero.",
+    "flags_affected": "n--------------zc\nn Cleared.\nz Set if result is zero; else cleared.\nc Low bit becomes carry: set if low bit was set; cleared if low bit was\nzero.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex) 6502\nAvailable to:\n65C02 65802/816\n#o/\nBytes\n#o/\nCycles\nAccumulator LSR A 4A X X X 1 2\nAbsolute LSR addr 4E X X X 3 61\nDirect Page (also DP) LSR dp 46 X X X 2 51,2\nAbsolute Indexed,X LSR addr,X 5E X X X 3 71.3\nDP Indexed,X LSR dp,X 56 X X X 2 61 2\n1 Add 2 cycles if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)\n3 Subtract 1 cycle if 65C02 and no page boundary crossed"
+  },
+  {
+    "mnemonic": "MVN",
+    "full_name": "the mnemonic table are copied into the output line using the",
+    "description": "",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "MVP",
+    "full_name": "The  instruction assumes X and Y specify the top (or ending)",
+    "description": "",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "NOP",
+    "full_name": "No Operation",
+    "description": "Executing a NOP takes no action; it has no effect on any 65x registers or mem\nory, except the program counter, which is incremented once to point to the next\ninstruction.\nIts primary uses are during debugging, where it is used to \"patch out\" unwanted\ncode, or as a place-holder, included in the assembler source, where you anticipate\nyou may have to \"patch in\" instructions, and want to leave a \"hole\" for the patch.\nNOP may also be used to expand timing loopseach NOP instruction takes two\ncycles to execute, so adding one or more may help fine tune a timing loop.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0 /\nBytes\nIt of\nCycles\nImplied NOP EA X X X 1 2"
+  },
+  {
+    "mnemonic": "ORA",
+    "full_name": "OR Accumulator with Memory",
+    "description": "Bitwise logical OR the data located at the effective address specified by the oper\nand with the contents of the accumulator. Each bit in the accumulator is ORed with\nthe corresponding bit in memory. The result is stored into the same accumulator\nbit.\nThe truth table for the logical OR operation is:\nSecond Operand\n0 1\nFirst Operand\n0 0 1\n1 1 1\nFigure 18.7. Logical OR Truth Table.\nA 1 or logical true results if either of the two operands of the OR operation is\ntrue.\n8-bit accumulator (all processors): Data ORed from memory is eight-bit.\n16-bit accumulator (65802/65816 only, m = 0): Data ORed from memory is\nsixteen-bit: the low-order eight bits are located at the effective address; the high-\norder eight bits are located at the effective address plus one.",
+    "flags": "n",
+    "flags_affected": "n",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "PEA",
+    "full_name": "Push Effective Absolute Address",
+    "description": "Push the sixteen-bit operand (typically an absolute address) onto the stack. The\nstack pointer is decremented twice. This operation always pushes sixteen bits of\ndata, irrespective of the settings of the m and x mode select flags.\nAlthough the mnemonic suggests that the sixteen-bit value pushed on the stack\nbe considered an address, the instruction may also be considered a \"push sixteen-bit\nimmediate data\" instruction, although the syntax of immediate addressing is not\nused. The assembler syntax is that of the absolute addressing mode, that is, a label\nor sixteen-bit value in the operand field. Unlike all other instructions that use this\nassembler syntax, the effective address itself, rather than the data stored at the\neffective address, is what is accessed (and in this case, pushed onto the stack).",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0 /\nBytes\n# of\nCycles\nStack (Absolute) PEA addr F4 X 3 5"
+  },
+  {
+    "mnemonic": "PEI",
+    "full_name": "Push Effective Indirect Address",
+    "description": "Push the sixteen-bit value located at the address formed by adding the direct\npage offset specified by the operand to the direct page register. The mnemonic\nimplies that the sixteen-bit data pushed is considered an address, although it can be\nany sixteen-bit data. This operation always pushes sixteen bits of data, irrespective\nof the settings of the m and x mode select flags.\nThe first byte pushed is the byte at the direct page offset plus one (the high byte\nof the double byte stored at the direct page offset). The byte at the direct page off\nset itself (the low byte) is pushed next. The stack pointer now points to the next\navailable stack location, directly below the last byte pushed.\nThe assembler syntax is that of direct page indirect; however, unlike other\ninstructions which use this assembler syntax, the effective indirect address, rather\nthan the data stored at that address, is what is accessed and pushed onto the stack.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing ModeSyntax\nOpcode Available to:\n(hex) 6502 65C02 65802/816\n#o/\nBytes\nU of\nCycles\nStack (Direct Page Indirect) PEI (dp) D4 x 2 61\n1 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)"
+  },
+  {
+    "mnemonic": "PER",
+    "full_name": "Push Effective PC Relative Indirect Address",
+    "description": "Add the current value of the program counter to the sixteen-bit signed displace\nment in the operand, and push the result on the stack. This operation always\npushes sixteen bits of data, irrespective of the settings of the m and x mode select\nflags.\nThe high byte of the sum is pushed first, then the low byte is pushed. After the\ninstruction is completed, the stack pointer points to the next available stack loca\ntion, immediately below the last byte pushed.\nBecause PER's operand is a displacement relative to the current value of the pro\ngram counter (as with the branch instructions), this instruction is helpful in writing\nself-relocatable code in which an address within the program (typically of a data\narea) must be accessed. The address pushed onto the stack will be the run-time\naddress of the data area, regardless of where the program was loaded in memory; it\nmay be pulled into a register, stored in an indirect pointer, or used on the stack\nwith the stack relative indirect indexed addressing mode to access the data at that\nlocation.\nAs is the case with the branch instructions, the syntax used is to specify as the\noperand the label of the data area you want to reference. This location must be in\nthe program bank, since the displacement is relative to the program counter. The\nassembler converts the assembly-time label into a displacement from the assembly\ntime address of the next instruction.\nThe value of the program counter used in the addition is the address of the next\ninstruction, that is, the instruction following the PER instruction.\nPER may also be used to push return addresses on the stack, either as part of a\nsimulated branch-to-subroutine or to place the return address beneath the stacked\nparameters to a subroutine call; always remember that a pushed return address\nshould be the desired return address minus one.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\nHof\nBytes\nHof\nCycles\nStack (Program Counter Relative Long) PER label 62 X 3 6"
+  },
+  {
+    "mnemonic": "PHA",
+    "full_name": "Push Accumulator",
+    "description": "Push the accumulator onto the stack. The accumulator itself is unchanged.\n8-bit accumulator (all processors): The single byte contents of the accumulator\nare pushedthey are stored to the location pointed to by the stack pointer and the\nstack pointer is decremented.\n16-bit accumulator (65802/65816 only, m = 0): Both accumulator bytes are\npushed. The high byte is pushed first, then the low byte. The stack pointer now\npoints to the next available stack location, directly below the last byte pushed.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to:# 0 / # of\nAddressing ModeSyntax (hex) 6502 65C02 65802/816 BytesCycles\nStack (Push) PHA 48 X X X 1 31\n1 Add 1 cycle if m = 0 (16-bit memory/accumulator)"
+  },
+  {
+    "mnemonic": "PHB",
+    "full_name": "Push Data Bank Register",
+    "description": "Push the contents of the data bank register onto the stack.\nThe single-byte contents of the data bank register are pushed onto the stack; the\nstack pointer now points to the next available stack location, directly below the\nbyte pushed. The data bank register itself is unchanged. Since the data bank regis\nter is an eight-bit register, only one byte is pushed onto the stack, regardless of the\nsettings of the m and x mode select flags.\nWhile the 65816 always generates 24-bit addresses, most memory references are\nspecified by a sixteen-bit address. These addresses are concatenated with the con\ntents of the data bank register to form a full 24-bit address. This instruction lets the\ncurrent value of the data bank register be saved prior to loading a new value.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# of\nBytes\nn of\nCycles\nStack (Push) PHB 8B X 1 3"
+  },
+  {
+    "mnemonic": "PHD",
+    "full_name": "Push Direct Page Register",
+    "description": "Push the contents of the direct page register D onto the stack.\nSince the direct page register is always a sixteen-bit register, this is always a\nsixteen-bit operation, regardless of the settings of the m and x mode select flags.\nThe high byte of the direct page register is pushed first, then the low byte. The\ndirect page register itself is unchanged. The stack pointer now points to the next\navailable stack location, directly below the last byte pushed.\nBy pushing the D register onto the stack, the local environment of a calling sub\nroutine may easily be saved by a called subroutine before modifying the D register\nto provide itself with its own direct page memory.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0 /\nBytes\n# 0 /\nCycles\nStack (Push) PHD OB X 1 4"
+  },
+  {
+    "mnemonic": "PHK",
+    "full_name": "Push Program Bank Register",
+    "description": "Push the program bank register onto the stack.\nThe single-byte contents of the program bank register are pushed. The program\nbank register itself is unchanged. The stack pointer now points to the next available\nstack location, directly below the byte pushed. Since the program bank register is\nan eight-bit register, only one byte is pushed onto the stack, regardless of the set\ntings of the m and x mode select flags.\nWhile the 65816 always generates 24-bit addresses, most jumps and branches\nspecify only a sixteen-bit address. These addresses are concatenated with the con\ntents of the program bank register to form a full 24-bit address. This instruction lets\nyou determine the current value of the program bank registerfor example, if you\nwant the data bank to be set to the same value as the program bank.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n#0/\nBytes\n#0/\nCycles\nStack (Push) PHK 4B X 1 3"
+  },
+  {
+    "mnemonic": "PHP",
+    "full_name": "Push Processr Status Register",
+    "description": "Push the contents of the processor status register P onto the stack.\nSince the status register is always an eight-bit register, this is always an eight-bit\noperation, regardless of the settings of the m and x mode select flags on the 65802/\n65816. The status register contents are not changed by the operation. The stack\npointer now points to the next available stack location, directly below the byte\npushed.\nThis provides the means for saving either the current mode settings or a particu\nlar set of status flags so they may be restored or in some other way used later.\nNote, however, that the e bit (the 6502 emulation mode flag on the 65802/65816)\nis not pushed onto the stack or otherwise accessed or saved. The only access to the\ne flag is via the XCE instruction.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n#0/\nBytes\n#0/\nCycles\nStack (Push) PHP 08 X X X 1 3"
+  },
+  {
+    "mnemonic": "PHX",
+    "full_name": "Push Index Register",
+    "description": "Push the contents of the X index register onto the stack. The register itself is\nunchanged.\n8-bit index registers (all processors): The eight-bit contents of the index register\nare pushed onto the stack. The stack pointer now points to the next available stack\nlocation, directly below the byte pushed.\n16-bit index registers (65802/65816 only, x = 0): The sixteen-bit contents of the\nindex register are pushed. The high byte is pushed first, then the low byte. The\nstack pointer now points to the next available stack location, directly below the last\nbyte pushed.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to:#0/ n of\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nStack (Push) PHX DA X X 1 31\n1 Add 1 cycle if x = 0 (16-bit index registers)"
+  },
+  {
+    "mnemonic": "PHY",
+    "full_name": "Push Index Register",
+    "description": "Push the contents of the Y index register onto the stack. The register itself is\nunchanged.\n8-bit index registers (all processors): The eight-bit contents of the index register\nare pushed onto the stack. The stack pointer now points to the next available stack\nlocation, directly below the byte pushed.\n16-bit index registers (65802/65816 only, x = 0): The sixteen-bit contents of the\nindex register are pushed. The high byte is pushed first, then the low byte. The\nstack pointer now points to the next available stack location, directly below the last\nbyte pushed.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to:# of # of\nAddressing ModeSyntax (hex) 6502 65C02 65802/816 Bytes Cycles\nStack (Push) PHY 5A x x 1 31\n1 Add 1 cycle if x = 0 (16-bit index registers)"
+  },
+  {
+    "mnemonic": "PLA",
+    "full_name": "Pull Accumulator",
+    "description": "Pull the value on the top of the stack into the accumulator. The previous con\ntents of the accumulator are destroyed.\n8-bit accumulator (all processors): The stack pointer is first incremented. Then\nthe byte pointed to by the stack pointer is loaded into the accumulator.\n16-bit accumulator (65802/65816 only, m = 0): Both accumulator bytes are\npulled. The accumulator's low byte is pulled first, then the high byte is pulled.\nNote that unlike some other microprocessors, the 65x pull instructions set the\nnegative and zero flags.",
+    "flags": "n  z -\nn Set if most significant bit of pulled value is set; else cleared.\nz Set if value pulled is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of pulled value is set; else cleared.\nz Set if value pulled is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to:# 0 / # of\nAddressing ModeSyntax (hex) 6502 65C02 65802/816 Bytes Cycles\nStack (Pull) PLA 68 X X X 1 41\n1 Add 1 cycle if m = 0 (16-bit memory/accumulator)"
+  },
+  {
+    "mnemonic": "PLB",
+    "full_name": "Pull Data Bank Register",
+    "description": "Pull the eight-bit value on top of the stack into the data bank register B, switch\ning the data bank to that value. All instructions which reference data that specify\nonly sixteen-bit addresses will get their bank address from the value pulled into the\ndata bank register. This is the only instruction that can modify the data bank reg\nister.\nSince the bank register is an eight-bit register, only one byte is pulled from the\nstack, regardless of the settings of the m and x mode select flags. The stack pointer\nis first incremented. Then the byte pointed to by the stack pointer is loaded into the\nregister.",
+    "flags": "n  z -\nn Set if most significant bit of pulled value is set; else cleared,\nz Set if value pulled is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of pulled value is set; else cleared,\nz Set if value pulled is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0 /\nBytes\nit of\nCycles\nStack (Pull) PLB AB X 1 4"
+  },
+  {
+    "mnemonic": "PLD",
+    "full_name": "Pull Direct Page Register",
+    "description": "Pull the sixteen-bit value on top of the stack into the direct page register D,\nswitching the direct page to that value.\nPLD is typically used to restore the direct page register to a previous value.\nSince the direct page register is a sixteen-bit register, two bytes are pulled from\nthe stack, regardless of the settings of the m and x mode select flags. The low byte\nof the direct page register is pulled first, then the high byte. The stack pointer now\npoints to where the high byte just pulled was stored; this is now the next available\nstack location.",
+    "flags": "n  z -\nn Set if most significant bit of pulled value is set; else cleared,\nz Set if value pulled is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of pulled value is set; else cleared,\nz Set if value pulled is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# of\nBytes\n# of\nCycles\nStack (Pull) PLD 2B X 1 5"
+  },
+  {
+    "mnemonic": "PLP",
+    "full_name": "Pull Status Flags",
+    "description": "Pull the eight-bit value on the top of the stack into the processor status register P,\nswitching the status byte to that value.\nSince the status register is an eight-bit register, only one byte is pulled from the\nstack, regardless of the settings of the m and x mode select flags on the 65802/\n65816. The stack pointer is first incremented. Then the byte pointed to by the stack\npointer is loaded into the status register.\nThis provides the means for restoring either previous mode settings or a particu\nlar set of status flags that reflect the result of a previous operation.\nNote, however, that the e flagthe 6502 emulation mode flag on the 65802/\n65816is not on the stack so cannot be pulled from it. The only means of setting\nthe e flag is the XCE instruction.",
+    "flags": "n v - b d i z c (6502, 65C02,\n65802/65816 emulation mode e = 1)\nn v m x d i z c (65802/65816 native mode e = 0)\nAll flags are replaced by the values in the byte pulled from the stack.",
+    "flags_affected": "n v - b d i z c (6502, 65C02,\n65802/65816 emulation mode e = 1)\nn v m x d i z c (65802/65816 native mode e = 0)\nAll flags are replaced by the values in the byte pulled from the stack.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\nHof\nBytes\n# 0 /\nCycles\nStack (Pull) PLP 28 X X X 1 4"
+  },
+  {
+    "mnemonic": "PLX",
+    "full_name": "Pull Index Register X from Stack",
+    "description": "Pull the value on the top of the stack into the X index register. The previous con\ntents of the register are destroyed.\n8-bit index registers (all processors): The stack pointer is first incremented. Then\nthe byte pointed to by the stack pointer is loaded into the register.\n16-bit index registers (65802/65816 only, x = 0): Both bytes of the index register\nare pulled. First the low-order byte of the index register is pulled, then the high-\norder byte of the index register is pulled.\nUnlike some other microprocessors, the 65x instructions to pull an index register\naffect the negative and zero flags.",
+    "flags": "n-------------z -\nn Set if most significant bit of pulled value is set; else cleared,\nz Set if value pulled is zero; else cleared.",
+    "flags_affected": "n-------------z -\nn Set if most significant bit of pulled value is set; else cleared,\nz Set if value pulled is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\nn of\nBytes\n# of\nCycles\nStack (Pull) PLX FA X X 1 41\n1 Add 1 cycle if x = 0 (16-bit index registers)"
+  },
+  {
+    "mnemonic": "PLY",
+    "full_name": "Pull Index Register Y from Stack",
+    "description": "Pull the value on the top of the stack into the Y index register. The previous con\ntents of the register are destroyed.\n8-bit index registers (all processors): The stack pointer is first incremented. Then\nthe byte pointed to by the stack pointer is loaded into the register.\n16-bit index registers (65802/65816 only, x = 0): Both bytes of the index register\nare pulled. First the low-order byte of the index register is pulled, then the high-\norder byte of the index register is pulled.\nUnlike some other microprocessors, the 65x instructions to pull an index register\naffect the negative and zero flags.",
+    "flags": "n  z -\nn Set if most significant bit of pulled value is set; else cleared,\nz Set if value pulled is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of pulled value is set; else cleared,\nz Set if value pulled is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n#o/\nBytes\nn of\nCycles\nStack (Pull) PLY 7A x x 1 41\n1 Add 1 cycle if x = 0 (16-bit index registers)"
+  },
+  {
+    "mnemonic": "REP",
+    "full_name": "Reset Status Bits",
+    "description": "For each bit set to one in the operand byte, reset the corresponding bit in the\nstatus register to zero. For example, if bit three is set in the operand byte, bit three\nin the status register (the decimal flag) is reset to zero by this instruction. Zeroes in\nthe operand byte cause no change to their corresponding status register bits.\nThis instruction lets you reset any flag or flags in the status register with a single\ntwo-byte instruction. Further, it is the only direct means of resetting several of the\nflags, including the m and x mode select flags (although instructions that pull the P\nstatus register affect the m and x mode select flags).\n6502 emulation mode (65802/65816, e = l): Neither the break flag nor bit five\n(the 6502's undefined flag bit) are affected by REP.",
+    "flags": "n v - - d i z c (65802/65816 emulation mode e = 1)\nn v m x d i z c (65802/65816 native mode e = 0)\nAll flags for which an operand bit is set are reset to zero.\nAll other flags are unaffected by the instruction.",
+    "flags_affected": "n v - - d i z c (65802/65816 emulation mode e = 1)\nn v m x d i z c (65802/65816 native mode e = 0)\nAll flags for which an operand bit is set are reset to zero.\nAll other flags are unaffected by the instruction.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0 /\nBytes\n# 0 /\nCycles\nImmediate REP ttconstC2 X 2 3"
+  },
+  {
+    "mnemonic": "ROL",
+    "full_name": "Rotate Memory or Accumulator Left",
+    "description": "Rotate the contents of the location specified by the operand left one bit. Bit one\ntakes on the value originally found in bit zero, bit two takes the value originally in\nbit one, and so on; the rightmost bit, bit zero, takes the value in the carry flag; the\nleftmost bit (bit 7 on the 6502 and 65C02 or if m = 1 on the 65802/65816, or bit 15\nif m = 0) is transferred into the carry flag.\n* rYYYYYY\\\n1 0 1 1 0 0\nCarry Flag\nFigure 18.8. ROL.\n8-bit accumulator/memory (all processors): Data rotated is eight bits, plus carry.\n16-bit accumulator/memory (65802/65816 only, m = 0): Data rotated is sixteen\nbits, plus carry: if in memory, the low-order eight bits are located at the effective\naddress; the high eight bits are located at the effective address plus one.",
+    "flags": "n--------------zc\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.\nc High bit becomes carry: set if high bit was set; cleared if high bit was\nclear.",
+    "flags_affected": "n--------------zc\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.\nc High bit becomes carry: set if high bit was set; cleared if high bit was\nclear.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex) 6502\nAvailable to:\n65C02 65802/816\nn of\nBytes\nHof\nCycles\nAccumulator ROL A 2A X X X 1 2\nAbsolute ROL addr 2E X X X 3 61\nDirect Page (also DP) ROL dp 26 X X X 2 5U\nAbsolute Indexed,X ROL addr,X 3E X X X 3 yl,3\nDP Indexed,X ROL dp,X 36 X X X 2 61,2\n1 Add 2 cycles if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)\n3 Subtract 1 cycle if 65C02 and no page boundary crossed"
+  },
+  {
+    "mnemonic": "ROR",
+    "full_name": "Rotate Memory or Accumulator Right",
+    "description": "Rotate the contents of the location specified by the operand right one bit. Bit\nzero takes on the value originally found in bit one, bit one takes the value origi\nnally in bit two, and so on; the leftmost bit (bit 7 on the 6502 and 65C02 or if m =\n1 on the 65802/65816, or bit 15 if m = 0) takes the value in the carry flag; the\nrightmost bit, bit zero, is transferred into the carry flag.\n1 0 1 1 0 0 1 1\nFigure 18.9. ROR.\n8-bit accumulator/memory (all processors): Data rotated is eight bits, plus carry.\n16-bit accumulator/memory (65802/65816 only, m = 0): Data rotated is sixteen\nbits, plus carry: if in memory, the low-order eight bits are located at the effective\naddress; the high-order eight bits are located at the effective address plus one.",
+    "flags": "n--------------zc\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.\nc Low bit becomes carry: set if low bit was set; cleared if low bit was\nclear.",
+    "flags_affected": "n--------------zc\nn Set if most significant bit of result is set; else cleared,\nz Set if result is zero; else cleared.\nc Low bit becomes carry: set if low bit was set; cleared if low bit was\nclear.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex) 6502\nAvailable to:\n65C02 65802/816\nn of\nBytes\nHof\nCycles\nAccumulator ROR A 6A X X X 1 2\nAbsolute ROR addr 6E X X X 3 61\nDirect Page (also DP) ROR dp 66 X X X 2 512\nAbsolute Indexed,X ROR addr.X7E X X X 3 71.3\nDP Indexed,X ROR dp,X 76 X X X 2 61 2\n1 Add 2 cycles if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)\n3 Subtract 1 cycle if 65C02 and no page boundary crossed"
+  },
+  {
+    "mnemonic": "RTI",
+    "full_name": "and before loading it into the program counter;  on the other hand",
+    "description": "",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "RTL",
+    "full_name": "Stack  Addressing",
+    "description": "",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "RTS",
+    "full_name": "Return from Subroutine",
+    "description": "Pull the program counter, incrementing the stacked, sixteen-bit value by one\nbefore loading the program counter with it.\nWhen a subroutine is called (via a jump to subroutine instruction), the current\nreturn address is pushed onto the stack. To return to the code following the sub\nroutine call, a return instruction must be executed, which pulls the return address\nfrom the stack, increments it, and loads the program counter with it, transferring\ncontrol to the instruction immediately following the jump to subroutine.\nStack\n(Stack Pointer After)\nReturn Address High\nReturn Address Low\nStack Pointer Before\nBank 0\nFigure 18.12. Stack before RTS.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to: # of # of\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nStack (RTS) RTS 60 x x x 1 6"
+  },
+  {
+    "mnemonic": "SBC",
+    "full_name": "Subtract with Borrow from Accumulator",
+    "description": "Subtract the data located at the effective address specified by the operand from\nthe contents of the accumulator; subtract one more if the carry flag is clear, and\nstore the result in the accumulator.\nThe 65x processors have no subtract instruction that does not involve the carry.\nTo avoid subtracting the carry flag from the result, either you must be sure it is set\nor you must explicitly set it (using SEC) prior to executing the SBC instruction.\nIn a multi-precision (multi-word) subtract, you set the carry before the low\nwords are subtracted. The low word subtraction generates a new carry flag value\nbased on the subtraction. The carry is set if no borrow was required and cleared if\nborrow was required. The complement of the new carry flag (one if the carry is\nclear) is subtracted during the next subtraction, and so on. Each result thus cor\nrectly reflects the borrow from the previous subtraction.\nNote that this use of the carry flag is the opposite of the way the borrow flag is\nused by some other processors, which clear (not set) the carry if no borrow was\nrequired.\nd flag clear: Binary subtraction is performed.\nd flag set: Binary coded decimal (BCD) subtraction is performed.\n8-bit accumulator (all processors): Data subtracted from memory is eight-bit.\n16-bit accumulator (65802/65816 only, m = 0): Data subtracted from memory is\nsixteen-bit: the low eight bits is located at the effective address; the high eight bits is\nlocated at the effective address plus one.",
+    "flags": "n v",
+    "flags_affected": "n v",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "SEC",
+    "full_name": "Set Carry Flag",
+    "description": "Set the carry flag in the status register.\nSEC is used prior to subtraction (using the 65x's SBC instruction) to keep the\ncarry flag from affecting the result, and prior to an XCE (exchange carry flag with\nemulation bit) instruction to put the 65802 or 65816 into 6502 emulation mode.",
+    "flags": "c\nc Carry flag set always.",
+    "flags_affected": "c\nc Carry flag set always.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0/ # of\nBytes Cycles\nImplied SEC 3 8 X X X 1 2"
+  },
+  {
+    "mnemonic": "SED",
+    "full_name": "Set Decimal Mode Flag",
+    "description": "Set the decimal mode flag in the status register.\nSED is used to shift 65x processors into decimal mode from binary mode, so that\nthe ADC and SBC instructions will operate correctly on BCD data, performing\nautomatic decimal adjustment.",
+    "flags": "---------d-------\nd Decimal mode flag set always.",
+    "flags_affected": "---------d-------\nd Decimal mode flag set always.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to:# 0 / # of\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nImplied SED F8 X X X 1 2"
+  },
+  {
+    "mnemonic": "SEI",
+    "full_name": "Set Interrupt Disable Flag",
+    "description": "Set the interrupt disable flag in the status register.\nSEI is used to disable hardware interrupt processing. When the i bit is set, mask\nable hardware interrupts (IRQ') are ignored. The processor itself sets the i flag\nwhen it begins servicing an interrupt, so interrupt handling routines that are\nintended to be interruptable must reenable interrupts with CLI. If interrupts are to\nremain blocked during the interrupt service, exiting the routine via RTI will auto\nmatically restore the status register with the i flag clear, re-enabling interrupts.",
+    "flags": "-----------i \ni Interrupt disable flag set always.",
+    "flags_affected": "-----------i \ni Interrupt disable flag set always.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to:# of # of\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nImplied SEI 78 X X X 1 2"
+  },
+  {
+    "mnemonic": "SEP",
+    "full_name": "Set Status Bits",
+    "description": "For each one-bit in the operand byte, set the corresponding bit in the status regis\nter to one. For example, if bit three is set in the operand byte, bit three in the status\nregister (the decimal flag) is set to one by this instruction. Zeroes in the operand\nbyte cause no change to their corresponding status register bits.\nThis instruction lets you set any flag or flags in the status register with a single\ntwo-byte instruction. Furthermore, it is the only direct means of setting the m and x\nmode select flags. (Instructions that pull the P status register indirectly affect the m\nand x mode select flags).\n6502 emulation mode (65802/65816, e = l): Neither the break flag nor bit five\n(the 6502's non-flag bit) is affected by SEP.",
+    "flags": "n v - - d i z c (65802/65816 emulation e = 1)\nn v m x d i z c (65802/65816 native mode e = 0)\nAll flags for which an operand bit is set are set to one.\nAll other flags are unaffected by the instruction.",
+    "flags_affected": "n v - - d i z c (65802/65816 emulation e = 1)\nn v m x d i z c (65802/65816 native mode e = 0)\nAll flags for which an operand bit is set are set to one.\nAll other flags are unaffected by the instruction.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# of # of\nBytes Cycles\nImmediate SEP ttconstE2 X 2 3"
+  },
+  {
+    "mnemonic": "STA",
+    "full_name": "Store Accumulator to Memory",
+    "description": "Store the value in the accumulator to the effective address specified by the oper\nand.\n8-bit accumulator (all processors): Value is eight-bit.\n16-bit accumulator (65802/65816 only, m = 0): Value is sixteen-bit: the low-order\neight bits are stored to the effective address; the high-order eight bits are stored to\nthe effective address plus one.\nThe 65x flags are unaffected by store instructions.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode+ + Syntax\nOpcode\n(hex) 6502\nAvailable on:\n65C02 65802/816\n# of Hof\nBytes Cycles\nAbsolute STA addr 8D X X X 3 4 1\nAbsolute Long STA long 8F X 4 5 1\nDirect Page (also DP) STA dp 85 X X X 2 31 2\nDP Indirect STA (dp) 92 X X 2 51,2\nDP Indirect Long STA [dpi 87 X 2 612\nAbsolute Indexed, X STA addr,X 9D X X X 3 5 1\nAbsolute Long Indexed,X STA long.X 9F X 4 51\nAbsolute Indexed, Y STA addr,Y 99 X X X 3 51\nDP Indexed,X STA dp,X 95 X X X 2 4u\nDP Indexed Indirect,X STA (dp,X) 81 X X X 2 612\nDP Indirect Indexed, Y STA (dp),Y 91 X X X 2 612\nDP Indirect Long Indexed,Y STA [dp],Y 97 X 2 61 2\nStack Relative (also SR) STA sr,S 83 X 2 41\nSR Indirect Indexed, Y STA (sr,S),Y 93 X 2 71\n+ +STA, a Primary Group Instruction, has available all of the Primary Group addressing modes and bit patterns\n1 Add 1 cycle if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL < > 0)"
+  },
+  {
+    "mnemonic": "STP",
+    "full_name": "Stop the Processor",
+    "description": "During the processor's next phase 2 clock cycle, stop the processor's oscillator\ninput; the processor is effectively shut down until a reset occurs (until the RES' pin\nis pulled low).\nSTP is designed to put the processor to sleep while it's not (actively) in use in\norder to reduce power consumption. Since power consumption is a function of fre\nquency with CMOS circuits, stopping the clock cuts power to almost nil.\nYour reset handling routine (pointed to by the reset vector, $00:FFFC-FD) should\nbe designed to either reinitialize the system or resume control through a\npreviously-installed reset handler.\nRemember that reset is an interrupt-like signal that causes the emulation bit to be\nset to one. It also causes the direct page register to be reset to zero; stack high to be\nset to one (forcing the stack pointer to page one); and the mode select flags to be set\nto one (eight-bit registers; a side effect is that the high bytes of the index registers\nare zeroed). STP is useful only in hardware systems (such as battery-powered sys\ntems) specifically designed to support a low-power mode.\nFlags Affected;\n-------------------",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# 0 / # 0 /\nBytes Cycles\nImplied STP DB X 1 31\n1 Uses 3 cycles to shut the processor down; additional cycles are required by reset to restart it"
+  },
+  {
+    "mnemonic": "STX",
+    "full_name": "Store Index Register X to Memory",
+    "description": "Store the value in index register X to the effective address specified by the oper\nand.\n8-bit index registers (all processors): Value is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Value is sixteen-bit: the low-\norder eight bits are stored to the effective address; the high-order eight bits are\nstored to the effective address plus one.\nThe 65x flags are unaffected by store instructions.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n* of # of\nBytes Cycles\nAbsolute SIX addr 8E X X X 3 41\nDirect Page STX dp 86 X X X 2 3 1 * 2\nDirect Page Indexed, Y STX dp,Y 96 X X X 2 41.2\n1 Add 1 cycle if x = 0 (16-bit index registers)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)"
+  },
+  {
+    "mnemonic": "STY",
+    "full_name": "Store Index Register Y to Memory",
+    "description": "Store the value in index register Y to the effective address specified by the oper\nand.\n8-bit index registers (all processors): Value is eight-bit.\n16-bit index registers (65802/65816 only, x = 0): Value is sixteen-bit: the low-\norder eight bits are stored to the effective address; the high-order eight bits are\nstored to the effective address plus one.\nThe 65x flags are unaffected by store instructions.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# 0 / # of\nBytes Cycles\nAbsolute STY addr 8C X X X 3 41\nDirect Page STY dp 84 X X X 2 31 , 2\nDirect Page Indexed, X STY dp,X 94 X X X 2 4 1 . 2\n1 Add 1 cycle if x = 0 (16-bit index registers)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)"
+  },
+  {
+    "mnemonic": "STZ",
+    "full_name": "Store Zero to Memory",
+    "description": "Store zero to the effective address specified by the operand.\n8-bit accumulator (all processors): Zero is stored at the effective address.\n16-bit accumulator/memory (65802/65816 only, m = 0): Zero is stored at the\neffective address and at the effective address plus one.\nThe 65x store zero instruction does not affect the flags.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# of * of\nBytes Cycles\nAbsolute STZ addr 9C X X 3 41\nDirect Page STZ dp 64 X X 2 312\nAbsolute Indexed,X STZ addr,X 9E X X 3 5 1\nDirect Page Indexed,X STZ dp,X 74 X X 2 4*2\n1 Add 1 cycle if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)"
+  },
+  {
+    "mnemonic": "TAX",
+    "full_name": "Transfer Accumulator to Index Register X",
+    "description": "Transfer the value in the accumulator to index register X. If the registers are dif\nferent sizes, the nature of the transfer is determined by the destination register. The\nvalue in the accumulator is not changed by the operation.\n8-bit accumulator, 8-bit index registers (all processors): Value transferred is\neight-bit.\n8-bit accumulator, 16-bit index registers (65802/65816 only, m = 1, x = 0): Value\ntransferred is sixteen-bit; the eight-bit A accumulator becomes the low byte of the\nindex register; the hidden eight-bit B accumulator becomes the high byte of the\nindex register.\n16-bit accumulator, 8-bit index registers (65802/65816 only, m = 0, x = l): Value\ntransferred to the eight-bit index register is eight-bit, the low byte of the accumu\nlator.\n16-bit accumulator, 16-bit index registers (65802/65816 only, m = 0, x = 0):\nValue transferred to the sixteen-bit index register is sixteen-bit, the full sixteen-bit\naccumulator.",
+    "flags": "n------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\ntt of it of\nBytes Cycles\nImplied TAX AA XX X 1 2"
+  },
+  {
+    "mnemonic": "TAY",
+    "full_name": "Transfer Accumulator to Index Register Y",
+    "description": "Transfer the value in the accumulator to index register Y. If the registers are dif\nferent sizes, the nature of the transfer is determined by the destination register. The\nvalue in the accumulator is not changed by the operation.\n8-bit accumulator, 8-bit index registers (all processors): Value transferred is\neight-bit.\n8-bit accumulator, 16-bit index registers (65802/65816 only, m = 1, x = 0): Value\ntransferred is sixteen-bit; the eight-bit A accumulator becomes the low byte of the\nindex register; the hidden eight-bit B accumulator becomes the high byte of the\nindex register.\n16-bit accumulator, 8-bit index registers (65802/65816 only, m = 0, x = 1): Value\ntransferred to the eight-bit index register is eight-bit, the low byte of the accumu\nlator.\n16-bit accumulator, 16-bit index registers (65802/65816 only, m = 0, x = 0):\nValue transferred to the sixteen-bit index register is sixteen-bit, the full sixteen-bit\naccumulator.",
+    "flags": "n  z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n  z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0 / # 0 /\nBytes Cycles\nImplied TAY A 8 X X X 1 2"
+  },
+  {
+    "mnemonic": "TCD",
+    "full_name": "Transfer 16-Bit Accumulator to Direct Page Register",
+    "description": "Transfer the value in the sixteen-bit accumulator C to the direct page register D,\nregardless of the setting of the accumulator/memory mode flag.\nAn alternate mnemonic is TAD, (transfer the value in the A accumulator to the\ndirect page register).\nIn TCD, the \"C\" is used to indicate that sixteen bits are transferred regardless of\nthe m flag. If the A accumulator is set to just eight bits (whether because the m flag\nis set, or because the processor is in 6502 emulation mode), then its value becomes\nthe low byte of the direct page register and the value in the hidden B accumulator\nbecomes the high byte of the direct page register.\nThe accumulator's sixteen-bit value is unchanged by the operation.",
+    "flags": "n z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to: n of # 0/\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nImplied TCD\n(or TAD)\n5B X 1 2"
+  },
+  {
+    "mnemonic": "TCS",
+    "full_name": "Transfer Accumulator to Stack Pointer",
+    "description": "Transfer the value in the accumulator to the stack pointer S. The accumulator's\nvalue is unchanged by the operation.\nAn alternate mnemonic is TAS (transfer the value in the A accumulator to the\nstack pointer).\nIn TCS, the \"C\" is used to indicate that, in native mode, sixteen bits are trans\nferred regardless of the m flag. If the A accumulator is set to just eight bits (because\nthe m flag is set), then its value is transferred to the low byte of the stack pointer\nand the value in the hidden B accumulator is transferred to the high byte of the\nstack pointer. In emulation mode, only the eight-bit A accumulator is transferred,\nsince the high stack pointer byte is forced to one (the stack is confined to page one).\nTCS, along with TXS, are the only two instructions for changing the value in the\nstack pointer. The two are also the only two transfer instructions not to alter the\nflags.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# of # 0/\nBytes Cycles\nImplied TCS\n(or TAS)\nIB X 1 2"
+  },
+  {
+    "mnemonic": "TDC",
+    "full_name": "Transfer Direct Page Register to 16-Bit Accumulator",
+    "description": "Transfer the value in the sixteen-bit direct page register D to the sixteen-bit accu\nmulator C, regardless of the setting of the accumulator/memory mode flag.\nAn alternate mnemonic is TDA (transfer the value in the direct page register to\nthe A accumulator).\nIn TDC, the \"C\" is used to indicate that sixteen bits are transferred regardless of\nthe m flag. If the A accumulator is set to just eight bits (whether because the m flag\nis set, or because the processor is in 6502 emulation mode), then it takes the value\nof the low byte of the direct page register and the hidden B accumulator takes the\nvalue of the high byte of the direct page register.\nThe direct page register's sixteen-bit value is unchanged by the operation.",
+    "flags": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to: it of tt of\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nI m p l i e d TDC 7B\n(or TDA)\nx 1 2"
+  },
+  {
+    "mnemonic": "TRB",
+    "full_name": "Test and Reset Memory Bits Against Accumulator",
+    "description": "Logically AND together the complement of the value in the accumulator with the\ndata at the effective address specified by the operand. Store the result at the mem\nory location.\nThis has the effect of clearing each memory bit for which the corresponding\naccumulator bit is set, while leaving unchanged all memory bits in which the cor\nresponding accumulator bits are zeroes.\nUnlike the BIT instruction, TRB is a read-modify-write instruction, not only cal\nculating a result and modifying a flag, but also storing the result to memory as\nwell.\nThe z zero flag is set based on a second and different operation, the ANDing of\nthe accumulator value (not its complement) with the memory value (the same way\nthe BIT instruction affects the zero flag). The result of this second operation is not\nsaved; only the zero flag is affected by it.\n8-bit accumulator/memory (65C02; 65802/65816, m = 1): Values in accumulator\nand memory are eight-bit.\n16-bit accumulator/memory (65802/65816 only, m = 0): Values in accumulator\nand memory are sixteen-bit: the low-order eight bits are located at the effective\naddress; the high-order eight bits are at the effective address plus one.",
+    "flags": "z -\nz Set if memory value AND'ed with accumulator value is zero; else\ncleared.",
+    "flags_affected": "z -\nz Set if memory value AND'ed with accumulator value is zero; else\ncleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# 0/ # of\nBytes Cycles\nAbsolute TRB addr 1C X X 3 61\nDirect Page TRB dp 1 4 X X 2 5 U\n1 Add 2 cycles if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)"
+  },
+  {
+    "mnemonic": "TSB",
+    "full_name": "Test and Set Memory Bits Against Accumulator",
+    "description": "Logically OR together the value in the accumulator with the data at the effective\naddress specified by the operand. Store the result at the memory location.\nThis has the effect of setting each memory bit for which the corresponding accu\nmulator bit is set, while leaving unchanged all memory bits in which the corres\nponding accumulator bits are zeroes.\nUnlike the BIT instruction, TSB is a read-modify-write instruction, not only cal\nculating a result and modifying a flag, but storing the result to memory as well.\nThe z zero flag is set based on a second different operation, the ANDing of the\naccumulator value with the memory value (the same way the BIT instruction\naffects the zero flag). The result of this second operation is not saved; only the zero\nflag is affected by it.\n8-bit accumulator/memory (65C02; 65802/65816, m = 1): Values in accumula\ntor and memory are eight-bit.\n16-bit accumulator/memory (65802/65816 only, m = 0); Values in accumulator\nand memory are sixteen-bit: the low-order eight bits are located at the effective\naddress; the high-order eight bits are at the effective address plus one.",
+    "flags": "z -\nz Set if memory value AND'ed with accumulator value is zero; else\ncleared.",
+    "flags_affected": "z -\nz Set if memory value AND'ed with accumulator value is zero; else\ncleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable on:\n6502 65C02 65802/816\n# of it of\nBytes Cycles\nAbsolute TSB addr OC X X 3 61\nDirect Page TSB dp 04 X X 2 51,2\n1 Add 2 cycles if m = 0 (16-bit memory/accumulator)\n2 Add 1 cycle if low byte of Direct Page register is other than zero (DL< >0)"
+  },
+  {
+    "mnemonic": "TSC",
+    "full_name": "Transfer Stack Pointer to 16-Bit Accumulator",
+    "description": "Transfer the value in the sixteen-bit stack pointer S to the sixteen-bit accumulator\nC, regardless of the setting of the accumulator/memory mode flag.\nAn alternate mnemonic is TSA (transfer the value in the stack pointer to the A\naccumulator).\nIn TSC, the \"C\" is used to indicate that sixteen bits are transferred regardless of\nthe m flag. If the A accumulator is set to just eight bits (whether because the m flag\nis set, or because the processor is in 6502 emulation mode), then it takes the value\nof the low byte of the stack pointer and the hidden B accumulator takes the value\nof the high byte of the stack pointer. (In emulation mode, B will always take a\nvalue of one, since the stack is confined to page one.)\nThe stack pointer's value is unchanged by the operation.",
+    "flags": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to: n of#0/\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nImplied TSC\n(or TSA)\n3B x 1 2"
+  },
+  {
+    "mnemonic": "TSX",
+    "full_name": "Transfer Stack Pointer to Index Register X",
+    "description": "Transfer the value in the stack pointer S to index register X. The stack pointer's\nvalue is not changed by the operation.\n8-bit index registers (all processors): Only the low byte of the value in the stack\npointer is transferred to the X register. In the 6502, the 65C02, and the 6502 emula\ntion mode, the stack pointer and the index registers are only a single byte each, so\nthe byte in the stack pointer is transferred to the eight-bit X register. In 65802/\n65816 native mode, the stack pointer is sixteen bits, so its most significant byte is\nnot transferred if the index registers are in eight-bit mode.\n16-bit index registers (65802/65816 only, x = 0): The full sixteen-bit value in the\nstack pointer is transferred to the X register.",
+    "flags": "n----------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n----------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\nn of Hof\nBytes Cycles\nImplied TSX BA X X X 1 2"
+  },
+  {
+    "mnemonic": "TXA",
+    "full_name": "Transfer Index Register X to Accumulator",
+    "description": "Transfer the value in index register X to the accumulator. If the registers are dif\nferent sizes, the nature of the transfer is determined by the destination (the accumu\nlator). The value in the index register is not changed by the operation.\n8-bit index registers, 8-bit accumulator (all processors): Value transferred is\neight-bit.\n16-bit index registers, 8-bit accumulator (65802/65816 only, x = 0, m = 1): Value\ntransferred to the eight-bit accumulator is eight-bit, the low byte of the index regis\nter; the hidden eight-bit accumulator B is not affected by the transfer.\n8-bit index registers, 16-bit accumulator (65802/65816 only, x = 1, m = 0): The\neight-bit index register becomes the low byte of the accumulator; the high accumu\nlator byte is zeroed.\n16-bit index registers, 16-bit accumulator (65802/65816 only, x = 0, m = 0):Value\ntransferred to the sixteen-bit accumulator is sixteen-bit, the full sixteen-bit index\nregister.",
+    "flags": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\nn of Hof\nBytes Cycles\nImplied TXA 8A X X X 1 2"
+  },
+  {
+    "mnemonic": "TXS",
+    "full_name": "Transfer Index Register X to Stack Pointer",
+    "description": "Transfer the value in index register X to the stack pointer, S. The index register's\nvalue is not changed by the operation.\nTXS, along with TCS, are the only two instructions for changing the value in the\nstack pointer. The two are also the only two transfer instructions that do not alter\nthe flags.\n6502, 65C02, and 6502 emulation mode(65802/65816, e = 1): The stack pointer is\nonly eight bits (it is concatenated to a high byte of one, confining the stack to page\none), and the index registers are only eight bits. The byte in X is transferred to the\neight-bit stack pointer.\n8-bit index registers (65802/65816 native mode, x = l): The stack pointer is six\nteen bits but the index registers are only eight bits. A copy of the byte in X is trans\nferred to the low stack pointer byte and the high stack pointer byte is zeroed.\n16-bit index registers (65802/65816 native mode, x = 0): The full sixteen-bit value\nin X is transferred to the sixteen-bit stack pointer.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# of # of\nBytes Cycles\nImplied TXS 9A X X X 1 2"
+  },
+  {
+    "mnemonic": "TXY",
+    "full_name": "Transfer Index Registers X to Y",
+    "description": "Transfer the value in index register X to index register Y. The value in index reg\nister X is not changed by the operation. Note that the two registers are never differ\nent sizes.\n8-bit index registers (x = 1): Value transferred is eight-bit.\n16-bit index registers (x = 0): Value transferred is sixteen-bit.",
+    "flags": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to: It of # of\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nImplied TXY 9B x 1 2"
+  },
+  {
+    "mnemonic": "TYA",
+    "full_name": "Transfer Index Register Y to Accumulator",
+    "description": "Transfer the value in index register Y to the accumulator. If the registers are dif\nferent sizes, the nature of the transfer is determined by the destination (the accumu\nlator). The value in the index register is not changed by the operation.\n8-bit index registers, 8-bit accumulator (all processors): Value transferred is\neight-bit.\n16-bit index registers, 8-bit accumulator (65802/65816 only, x = 0, m = 1): Value\ntransferred to the eight-bit accumulator is eight-bit, the low byte of the index regis\nter; the hidden eight-bit accumulator B is not affected by the transfer.\n8-bit index registers, 16-bit accumulator (65802/65816 only, x = 1, m = 0): The\neight-bit index register becomes the low byte of the accumulator; the high accumu\nlator byte is zeroed.\n16-bit index registers, 16-bit accumulator (65802/65816 only, x = 0, m = 0):\nValue transferred to the sixteen-bit accumulator is sixteen-bit, the full sixteen-bit\nindex register.",
+    "flags": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\nHof % of\nBytes Cycles\nImplied TYA 98 XX X 1 2"
+  },
+  {
+    "mnemonic": "TYX",
+    "full_name": "Transfer Index Registers Y to X",
+    "description": "Transfer the value in index register Y to index register X. The value in index reg\nister Y is not changed by the operation. Note that the two registers are never differ\nent sizes.\n8-bit index registers (x = 1): Value transferred is eight-bit.\n16-bit index registers (x = 0): Value transferred is sixteen-bit.",
+    "flags": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "flags_affected": "n--------------z -\nn Set if most significant bit of transferred value is set; else cleared,\nz Set if value transferred is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nOpcode Available to: # of # of\nAddressing Mode Syntax (hex) 6502 65C02 65802/816 Bytes Cycles\nImplied TYX BB x 1 2"
+  },
+  {
+    "mnemonic": "WAI",
+    "full_name": "Wait for Interrupt",
+    "description": "Pull the RDY pin low. Power consumption is reduced and RDY remains low\nuntil an external hardware interrupt (NMI, IRQ, ABORT, or RESET) is received.\nWAI is designed to put the processor to sleep during an external event to reduce\nits power consumption, to allow it to be synchronized with an external event, and/\nor to reduce interrupt latency (an interrupt occurring during execution of an\ninstruction is not acted upon until execution of the instruction is complete, perhaps\nmany cycles later; WAI ensures that an interrupt is recognized immediately).\nOnce an interrupt is received, control is vectored through one of the hardware\ninterrupt vectors; an RTI from the interrupt handling routine will return control to\nthe instruction following the original WAI. However, if by setting the i flag, inter\nrupts have been disabled prior to the execution of the WAI instruction, and IRQ' is\nasserted, the \"wait\" condition is terminated and control resumes with the next\ninstruction, rather than through the interrupt vectors. This provides the quickest\nresponse to an interrupt, allowing synchronization with external events. WAI also\nfrees up the bus; since RDY is pulled low in the third instruction cycle, the proces\nsor may be disconnected from the bus if BE is also pulled low.",
+    "flags": "-------------------",
+    "flags_affected": "-------------------",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# 0/ # 0/\nBytes Cycles\nImplied WAI CB X 1 31\nlUses 3 cycles to shut the processor down; additional cycles are required by interrupt to restart it"
+  },
+  {
+    "mnemonic": "WDM",
+    "full_name": "Reserved for Future Expansion",
+    "description": "",
+    "flags": "",
+    "flags_affected": "",
+    "addressing_modes": [],
+    "codes_raw": ""
+  },
+  {
+    "mnemonic": "XBA",
+    "full_name": "Exchange the B and A Accumulators",
+    "description": "B represents the high-order byte of the sixteen-bit C accumulator, and A in this\ncase represents the low-order byte. XBA swaps the contents of the low-order and\nhigh-order bytes of C.\nAn alternate mnemonic is SWA (swap the high and low bytes of the sixteen-bit A\naccumulator).\nXBA can be used to invert the low-order, high-order arrangement of a sixteen-bit\nvalue, or to temporarily store an eight-bit value from the A accumulator into B.\nSince it is an exchange, the previous contents of both accumulators are changed,\nreplaced by the previous contents of the other.\nNeither the mode select flags nor the emulation mode flag affects this operation.\nThe flags are changed based on the new value of the low byte, the A accumulator\n(that is, on the former value of the high byte, the B accumulator), even in sixteen-\nbit accumulator mode.",
+    "flags": "n -------------z -\nn Set if most significant bit of new 8-bit value in A accumulator is set;\nelse cleared.\nz Set if new 8-bit value in A accumulator is zero; else cleared.",
+    "flags_affected": "n -------------z -\nn Set if most significant bit of new 8-bit value in A accumulator is set;\nelse cleared.\nz Set if new 8-bit value in A accumulator is zero; else cleared.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\n# of n of\nBytes Cycles\nImplied XBA\n(or SWA)\nEB X 1 3"
+  },
+  {
+    "mnemonic": "XCE",
+    "full_name": "Exchange Carry and Emulation Bits",
+    "description": "This instruction is the only means provided by the 65802 and 65816 to shift\nbetween 6502 emulation mode and the full, sixteen-bit native mode.\nThe emulation mode is used to provide hardware and software compatibility\nbetween the 6502 and 65802/65816.\nIf the processor is in emulation mode, then to switch to native mode, first clear\nthe carry bit, then execute an XCE. Since it is an exchange operation, the carry flag\nwill reflect the previous state of the emulation bit. Switching to native mode causes\nbit five to stop functioning as the break flag, and function instead as the x mode\nselect flag. A second mode select flag, m, uses bit six, which was unused in emula\ntion mode. Both mode select flags are initially set to one (eight-bit modes). There\nare also other differences described in the text.\nIf the processor is in native mode, then to switch to emulation mode, you first set\nthe carry bit, then execute an XCE. Switching to emulation mode causes the mode\nselect flags (m and x) to be lost from the status register, with x replaced by the b\nbreak flag. This forces the accumulator to eight bits, but the high accumulator byte\nis preserved in the hidden B accumulator. It also forces the index registers to eight\nbits, causing the loss of values in their high bytes, and the stack to page one, caus\ning the loss of the high byte of the previous stack address. There are also other dif\nferences described in the text.\ne",
+    "flags": "mb/x c\ne Takes carry's previous value: set if carry was set; else cleared,\nc Takes emulation's previous value: set if previous mode was\nemulation; else cleared,\nm m is a native mode flag only; switching to native mode sets it to 1.\nx x is a native mode flag only; it becomes the b flag in emulation,\nb b is an emulation mode flag only; it is set to 1 to become the x flag in\nnative.",
+    "flags_affected": "mb/x c\ne Takes carry's previous value: set if carry was set; else cleared,\nc Takes emulation's previous value: set if previous mode was\nemulation; else cleared,\nm m is a native mode flag only; switching to native mode sets it to 1.\nx x is a native mode flag only; it becomes the b flag in emulation,\nb b is an emulation mode flag only; it is set to 1 to become the x flag in\nnative.",
+    "addressing_modes": [],
+    "codes_raw": "Codes:\nAddressing Mode Syntax\nOpcode\n(hex)\nAvailable to:\n6502 65C02 65802/816\nHof Hof\nBytes Cycles\nImplied XCE FB X 1 2"
+  }
+]

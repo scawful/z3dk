@@ -1,0 +1,182 @@
+[
+  {
+    "id": "mx_flag_mismatch",
+    "title": "M/X width mismatch across calls",
+    "description": "Subroutines can misread 8-bit vs 16-bit registers if callers do not preserve REP/SEP state.",
+    "example_code": "SEP #$20\nJSR RoutineExpecting16BitA",
+    "workaround": "Document entry width and set REP/SEP explicitly at routine boundaries.",
+    "type": "mx_flag",
+    "text": "Subroutines can misread 8-bit vs 16-bit registers if callers do not preserve REP/SEP state.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "stack_imbalance",
+    "title": "Unbalanced stack operations",
+    "description": "PHA/PHX/PHY without matching pulls causes RTS/RTL to return to invalid addresses.",
+    "example_code": "PHA\nJSR Work\nRTS",
+    "workaround": "Match every push with a corresponding pull on all control-flow paths.",
+    "type": "stack",
+    "text": "PHA/PHX/PHY without matching pulls causes RTS/RTL to return to invalid addresses.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "long_vs_short_call",
+    "title": "JSR/JSL bank mismatch",
+    "description": "JSR is bank-local. Cross-bank calls require JSL/RTL.",
+    "example_code": "JSR $9000 ; target lives in another bank",
+    "workaround": "Use JSL for far calls and ensure callee returns with RTL.",
+    "type": "calling_convention",
+    "text": "JSR is bank-local. Cross-bank calls require JSL/RTL.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "vram_outside_blank",
+    "title": "VRAM writes outside VBlank",
+    "description": "Writing VRAM/CGRAM/OAM during active display can corrupt visual output.",
+    "example_code": "STA $2118\nSTA $2119",
+    "workaround": "Perform PPU memory writes during VBlank/HBlank or forced blank.",
+    "type": "ppu_timing",
+    "text": "Writing VRAM/CGRAM/OAM during active display can corrupt visual output.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "dma_without_size",
+    "title": "DMA trigger without byte count",
+    "description": "Starting DMA with $43x5/$43x6 unset copies unexpected lengths.",
+    "example_code": "LDA #$01 : STA $420B",
+    "workaround": "Set transfer mode, source, destination, and size before writing $420B.",
+    "type": "dma",
+    "text": "Starting DMA with $43x5/$43x6 unset copies unexpected lengths.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "dummy_vram_read",
+    "title": "Missing initial VRAM dummy read",
+    "description": "The first read from $2139/$213A after setting $2116/$2117 is a prefetch value.",
+    "example_code": "LDA $2139 ; treated as first real byte",
+    "workaround": "Discard the first read after each VRAM address change.",
+    "type": "vram_read",
+    "text": "The first read from $2139/$213A after setting $2116/$2117 is a prefetch value.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "direct_page_assumption",
+    "title": "Direct page relocation assumptions",
+    "description": "Code using direct-page addressing may break if D register is moved.",
+    "example_code": "LDA $00",
+    "workaround": "Set D register intentionally or avoid hard DP assumptions in shared routines.",
+    "type": "direct_page",
+    "text": "Code using direct-page addressing may break if D register is moved.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "db_register_leak",
+    "title": "Data bank register leakage",
+    "description": "Long data reads depend on DB. Subroutines that change DB must restore it.",
+    "example_code": "PHB\nLDA #$7E : PHA : PLB\n... ; missing PLB",
+    "workaround": "Wrap DB changes with PHB/PLB and keep scope minimal.",
+    "type": "data_bank",
+    "text": "Long data reads depend on DB. Subroutines that change DB must restore it.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "forced_blank_restore",
+    "title": "Forgetting to restore INIDISP",
+    "description": "Leaving forced blank set keeps the screen black.",
+    "example_code": "LDA #$80 : STA $2100",
+    "workaround": "Restore brightness and clear forced blank after PPU updates.",
+    "type": "ppu_state",
+    "text": "Leaving forced blank set keeps the screen black.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "oam_hi_table_conflict",
+    "title": "OAM high-table overlap",
+    "description": "Sprite size/priority bits in high OAM can be overwritten by incorrect indexing.",
+    "example_code": "STA $2104 ; sequential writes without high-table planning",
+    "workaround": "Account for both low OAM and high table layout when streaming OAM data.",
+    "type": "oam",
+    "text": "Sprite size/priority bits in high OAM can be overwritten by incorrect indexing.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "branch_range_limit",
+    "title": "8-bit branch range overflow",
+    "description": "Conditional branches only span -128..+127 bytes and fail silently in macro expansions.",
+    "example_code": "BNE far_label",
+    "workaround": "Use BRL or split logic with intermediate labels.",
+    "type": "branching",
+    "text": "Conditional branches only span -128..+127 bytes and fail silently in macro expansions.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "nmi_race",
+    "title": "NMI race while updating shared state",
+    "description": "Main thread and NMI thread can race on WRAM queues or PPU mirrors.",
+    "example_code": "STA $7E1F00 ; updated in both main and NMI",
+    "workaround": "Use handoff flags or double-buffered mirrors synchronized in NMI.",
+    "type": "concurrency",
+    "text": "Main thread and NMI thread can race on WRAM queues or PPU mirrors.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "hdma_table_termination",
+    "title": "HDMA table termination missing",
+    "description": "HDMA tables must terminate with 00 count byte or engine reads past table end.",
+    "example_code": "db $7F, $12, $34 ; no 00 terminator",
+    "workaround": "Always terminate HDMA tables and validate table bank/address.",
+    "type": "hdma",
+    "text": "HDMA tables must terminate with 00 count byte or engine reads past table end.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "self_modifying_bank_wrap",
+    "title": "Bank wrap in self-modifying code",
+    "description": "Incrementing low-word pointers can wrap within bank and miss intended target.",
+    "example_code": "INC pointer_low\nBNE +\nINC pointer_high",
+    "workaround": "Use full 24-bit pointer logic when patching across bank boundaries.",
+    "type": "pointer_math",
+    "text": "Incrementing low-word pointers can wrap within bank and miss intended target.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "irq_nmi_reentry",
+    "title": "Interrupt re-entry assumptions",
+    "description": "Handlers that do not preserve full CPU state can corrupt mainline execution.",
+    "example_code": "IRQ:\n  PHX\n  ...\n  RTI",
+    "workaround": "Save/restore all clobbered registers and keep handlers bounded.",
+    "type": "interrupts",
+    "text": "Handlers that do not preserve full CPU state can corrupt mainline execution.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "joypad_latch_timing",
+    "title": "Joypad latch timing misuse",
+    "description": "Polling joypad registers outside expected latch cadence can yield stale inputs.",
+    "example_code": "LDA $4218\nLDA $4219",
+    "workaround": "Read joypad state in the expected frame step after latch/update.",
+    "type": "input",
+    "text": "Polling joypad registers outside expected latch cadence can yield stale inputs.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "cgram_half_write",
+    "title": "CGRAM half-write ordering",
+    "description": "CGRAM color values require low byte then high byte; reversed order corrupts colors.",
+    "example_code": "STA $2122 ; high byte first",
+    "workaround": "Write low 8 bits then high 7 bits for each color entry.",
+    "type": "cgram",
+    "text": "CGRAM color values require low byte then high byte; reversed order corrupts colors.",
+    "source": "z3dk_curated"
+  },
+  {
+    "id": "mode7_matrix_stale",
+    "title": "Mode 7 matrix stale registers",
+    "description": "Partial updates to $211B-$2120 can produce transient distortion.",
+    "example_code": "STA $211B\nSTA $211C ; other matrix regs unchanged",
+    "workaround": "Update all required Mode 7 registers as one atomic configuration step.",
+    "type": "mode7",
+    "text": "Partial updates to $211B-$2120 can produce transient distortion.",
+    "source": "z3dk_curated"
+  }
+]

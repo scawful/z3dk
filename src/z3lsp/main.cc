@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <chrono>
 #include <algorithm>
-#include <queue>
 #include <sstream>
 #include <fstream>
 #include <iomanip>
@@ -1424,13 +1423,19 @@ int main(int argc, char** argv) {
         // Find an open document that has labels from the assembler
         for (const auto& pair : documents) {
           if (!pair.second.labels.empty()) {
-            json mesen_cmd = {{"type", "SYMBOLS_LOAD"}, {"symbols", json::array()}};
-            for (const auto& label : pair.second.labels) {
-              mesen_cmd["symbols"].push_back({
-                {"name", label.name},
-                {"addr", label.address}
-              });
+            const std::string mlb_path = "/tmp/z3lsp_sync_symbols.mlb";
+            {
+              std::ofstream mlb_file(mlb_path);
+              for (const auto& label : pair.second.labels) {
+                std::ostringstream line;
+                line << "SnesPrgRom:"
+                     << std::hex << std::uppercase << std::setfill('0') << std::setw(6)
+                     << label.address
+                     << ":" << label.name << "\n";
+                mlb_file << line.str();
+              }
             }
+            json mesen_cmd = {{"type", "SYMBOLS_LOAD"}, {"file", mlb_path}, {"clear", "true"}};
             z3lsp::g_mesen.SendCommand(mesen_cmd);
             response["result"] = "Synced " + std::to_string(pair.second.labels.size()) + " symbols";
             break;
@@ -1439,7 +1444,7 @@ int main(int argc, char** argv) {
       } else if (command == "mesen.toggleBreakpoint") {
         if (!args.empty() && args[0].is_number()) {
           uint32_t addr = args[0].get<uint32_t>();
-          json mesen_cmd = {{"type", "BREAKPOINT"}, {"action", "toggle"}, {"addr", addr}};
+          json mesen_cmd = {{"type", "BREAKPOINT"}, {"action", "add"}, {"addr", addr}};
           z3lsp::g_mesen.SendCommand(mesen_cmd);
           std::string addr_str;
           std::ostringstream ss;
@@ -1447,7 +1452,7 @@ int main(int argc, char** argv) {
           response["result"] = "Toggled breakpoint at $" + ss.str();
         }
       } else if (command == "mesen.stepInstruction") {
-        json mesen_cmd = {{"type", "STEP_INTO"}};
+        json mesen_cmd = {{"type", "STEP"}, {"mode", "into"}};
         if (z3lsp::g_mesen.SendCommand(mesen_cmd)) {
            response["result"] = "Stepped one instruction";
         } else {

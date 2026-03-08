@@ -14,14 +14,24 @@ namespace z3lsp {
 
 MesenClient g_mesen;
 
-MesenClient::MesenClient() : socket_fd_(-1) {}
+MesenClient::MesenClient()
+    : socket_fd_(-1),
+      last_connect_failure_(std::chrono::steady_clock::time_point{}) {}
 MesenClient::~MesenClient() { Disconnect(); }
 
 bool MesenClient::Connect() {
   if (IsConnected()) return true;
-  
+
+  auto now = std::chrono::steady_clock::now();
+  if (now - last_connect_failure_ < std::chrono::milliseconds(2000)) {
+    return false;
+  }
+
   std::string path = FindLatestSocket();
-  if (path.empty()) return false;
+  if (path.empty()) {
+    last_connect_failure_ = std::chrono::steady_clock::now();
+    return false;
+  }
 
   socket_path_ = path;
   socket_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -44,13 +54,14 @@ bool MesenClient::Connect() {
     
     struct timeval tv;
     tv.tv_sec = 0;
-    tv.tv_usec = 100000;
+    tv.tv_usec = 500000;
     fd_set wset;
     FD_ZERO(&wset);
     FD_SET(socket_fd_, &wset);
     if (select(socket_fd_ + 1, NULL, &wset, NULL, &tv) <= 0) {
       close(socket_fd_);
       socket_fd_ = -1;
+      last_connect_failure_ = std::chrono::steady_clock::now();
       return false;
     }
   }
@@ -59,7 +70,7 @@ bool MesenClient::Connect() {
   
   struct timeval rtv;
   rtv.tv_sec = 0;
-  rtv.tv_usec = 200000;
+  rtv.tv_usec = 500000;
   setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
 
   return true;
@@ -81,7 +92,10 @@ std::optional<uint8_t> MesenClient::ReadByte(uint32_t addr) {
   json cmd = {{"type", "READ"}, {"addr", "0x" + ToHexString(addr, 6)}};
   auto response = SendCommand(cmd);
   if (response.has_value() && response->value("success", false)) {
-    return response->value("data", uint8_t(0));
+    std::string hex_str = response->value("data", std::string("0x00"));
+    if (hex_str.size() >= 2 && hex_str.substr(0, 2) == "0x") {
+      return static_cast<uint8_t>(std::stoul(hex_str.substr(2), nullptr, 16));
+    }
   }
   return std::nullopt;
 }
@@ -97,12 +111,15 @@ std::optional<json> MesenClient::SendCommand(const json& cmd) {
 
   char buffer[4096];
   std::string response;
-  ssize_t received = recv(socket_fd_, buffer, sizeof(buffer), 0);
-  if (received <= 0) {
-    Disconnect();
-    return std::nullopt;
+  while (response.find('\n') == std::string::npos) {
+    ssize_t received = recv(socket_fd_, buffer, sizeof(buffer), 0);
+    if (received <= 0) {
+      Disconnect();
+      return std::nullopt;
+    }
+    response.append(buffer, received);
   }
-  response.append(buffer, received);
+  response = response.substr(0, response.find('\n'));
   
   try {
     return json::parse(response);
@@ -113,6 +130,15 @@ std::optional<json> MesenClient::SendCommand(const json& cmd) {
     Log("MesenClient JSON parse error: unknown exception");
     return std::nullopt;
   }
+}
+
+bool MesenClient::Ping() {
+  if (!Connect()) return false;
+  json cmd = {{"type", "PING"}};
+  auto response = SendCommand(cmd);
+  if (!response.has_value()) return false;
+  return response->value("success", false) &&
+         response->value("data", std::string("")) == "PONG";
 }
 
 std::string MesenClient::FindLatestSocket() {

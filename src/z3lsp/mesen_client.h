@@ -3,6 +3,7 @@
 
 #include <string>
 #include <optional>
+#include <chrono>
 #include <nlohmann/json.hpp>
 
 namespace z3lsp {
@@ -17,6 +18,7 @@ class MesenClient {
   bool Connect();
   void Disconnect();
   bool IsConnected() const;
+  bool Ping();
 
   std::optional<uint8_t> ReadByte(uint32_t addr);
   std::optional<json> SendCommand(const json& cmd);
@@ -26,6 +28,7 @@ class MesenClient {
 
   int socket_fd_;
   std::string socket_path_;
+  std::chrono::steady_clock::time_point last_connect_failure_;
 };
 
 extern MesenClient g_mesen;

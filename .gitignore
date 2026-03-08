@@ -80,4 +80,5 @@ node_modules/
 
 # Build directories
 build-*/
+build_test/
 extensions/vscode-z3dk/dist/

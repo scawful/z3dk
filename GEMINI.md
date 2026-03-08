@@ -1,38 +1,20 @@
-# GEMINI.md - z3dk Build Instructions
+# GEMINI.md (Compact)
 
-_Extends: ~/AGENTS.md, ~/GEMINI.md_
+Purpose: concise Gemini-specific routing for this folder.
 
-Build and test instructions for the Zelda3 Development Kit (z3dk).
+Gemini Rules
+1. Follow local `AGENTS.md` first when both exist.
+2. Minimize scope and avoid unnecessary refactors.
+3. Reuse existing project commands and scripts.
+4. Run targeted verification before completion.
+5. Be explicit when checks were skipped or unavailable.
+6. Ask for clarification when requirements are ambiguous.
 
-## Build Commands
+Response Contract
+- What changed
+- What was checked
+- Known limitations or next actions
 
-This project uses CMake for certain tools but primarily relies on shell scripts for testing and assembly.
-
-### Regression Tests
-
-```bash
-cd ~/src/hobby/z3dk
-./run_tests.sh
-```
-
-```bash
-mkdir -p build && cd build
-cmake ..
-
-# Build all tools
-make
-
-# Build specific tools
-make z3asm      # Assembler
-make z3disasm   # Disassembler
-make z3lsp      # Language Server
-```
-
-### LSP Support
-
-To use the Language Server, ensure `build/bin/z3lsp` is built. It supports standard LSP features (Diagnostics, Go to Definition, Rename).
-
-## Documentation
-
-- **README**: Full usage details are in [README.md](README.md).
-- **Context**: Project-specific knowledge is in `.context/`.
+Reference Material
+- Full legacy guidance: `.context/knowledge/agent-reference.md`.
+- Use repository docs as source of truth for implementation details.

@@ -1,21 +1,21 @@
-name = "zAsar"
-description = "SNES assembler (65c816, SPC700, Super FX) for ROM patches and homebrew"
-aliases = ["z3dk", "z3asm", "z3lsp"]
-tags = ["game-dev", "romhacking", "snes", "assembler", "c++", "active"]
+name = "z3dk"
+description = "Zelda 3 Development Kit - Hard fork of Asar with structured output, LSP, and IDE integration"
+aliases = ["zAsar", "z3asm", "z3lsp", "z3disasm"]
+tags = ["tools", "romhacking", "snes", "assembler", "lsp", "active"]
 platforms = ["mac", "linux", "windows"]
-stage = "production"
+stage = "beta"
 is_product = false
 public = true
+commercial_intent = "none"
 
-languages = ["cpp"]
+languages = ["cpp", "python"]
 build_system = "cmake"
 
 [links]
 github = "https://github.com/scawful/zAsar"
 
 [build]
-system = "cmake"
-command = "mkdir -p build && cd build && cmake .. && make"
+command = "cmake -B build && cmake --build build -j8"
 
 [test]
 command = "./run_tests.sh"

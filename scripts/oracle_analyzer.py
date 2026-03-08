@@ -20,6 +20,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -87,6 +88,15 @@ PROBLEMATIC_PATTERNS = [
     },
 ]
 
+# Known cross-module hook targets that intentionally live outside the hook module.
+# Keep this list explicit and small; new entries should be justified in code review.
+HOOK_TARGET_OWNER_ALLOWLIST = {
+    "Graphics_Transfer",
+    "PutRollerBeneathLink",
+    "DontTeleportWithoutFlippers",
+    "Palette_ArmorAndGloves",
+}
+
 # ALTTP vanilla routines that expect specific states
 # NOTE: These are used as fallback if hooks.json doesn't specify expected state
 VANILLA_STATE_EXPECTATIONS = {
@@ -123,6 +133,7 @@ class OracleAnalysisResult:
     hook_abi_issues: list[dict]
     width_stack_imbalances: list[dict] = field(default_factory=list)
     sprite_table_overflow: list[dict] = field(default_factory=list)
+    hook_target_owner_issues: list[dict] = field(default_factory=list)
     phb_plb_issues: list[dict] = field(default_factory=list)
     jsl_target_issues: list[dict] = field(default_factory=list)
     rtl_rts_issues: list[dict] = field(default_factory=list)
@@ -138,6 +149,7 @@ class OracleAnalysisResult:
             [AnalysisDiagnostic(**a) for a in self.hook_abi_issues] +
             [AnalysisDiagnostic(**w) for w in self.width_stack_imbalances] +
             [AnalysisDiagnostic(**s) for s in self.sprite_table_overflow] +
+            [AnalysisDiagnostic(**h) for h in self.hook_target_owner_issues] +
             [AnalysisDiagnostic(**p) for p in self.phb_plb_issues] +
             [AnalysisDiagnostic(**j) for j in self.jsl_target_issues] +
             [AnalysisDiagnostic(**r) for r in self.rtl_rts_issues]
@@ -221,6 +233,8 @@ def load_hooks_json(path: Path) -> tuple[list[tuple], dict[int, RegisterState], 
             'skip_abi': bool(hook.get('skip_abi')) or _is_data_label(name) or _is_data_label(hook.get('target')),
             'name': name,
             'abi_class': hook.get('abi_class', ''),
+            'target': hook.get('target'),
+            'source': hook.get('source', ''),
         }
 
         if exp_m is not None or exp_x is not None:
@@ -261,6 +275,188 @@ def load_hooks_json(path: Path) -> tuple[list[tuple], dict[int, RegisterState], 
             )
 
     return hooks_list, state_expectations, exit_expectations, hook_meta
+
+
+def parse_wla_sym_source_map(path: Path) -> tuple[dict[int, str], dict[int, set[int]]]:
+    """Parse [source files] and [addr-to-line mapping] sections from a WLA .sym file."""
+    module_to_file: dict[int, str] = {}
+    addr_to_modules: dict[int, set[int]] = defaultdict(set)
+
+    if not path.exists():
+        return module_to_file, addr_to_modules
+
+    section = ""
+    with path.open(encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith(";"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                section = line.lower()
+                continue
+
+            if section == "[source files]":
+                m = re.match(r"^([0-9A-Fa-f]{4})\s+[0-9A-Fa-f]{8}\s+(.+)$", line)
+                if not m:
+                    continue
+                module_id = int(m.group(1), 16)
+                module_to_file[module_id] = m.group(2).strip()
+                continue
+
+            if section == "[addr-to-line mapping]":
+                m = re.match(
+                    r"^([0-9A-Fa-f]{2}):([0-9A-Fa-f]{4})\s+([0-9A-Fa-f]{4}):([0-9A-Fa-f]{8})$",
+                    line,
+                )
+                if not m:
+                    continue
+                bank = int(m.group(1), 16)
+                offs = int(m.group(2), 16)
+                module_id = int(m.group(3), 16)
+                addr = (bank << 16) | offs
+                addr_to_modules[addr].add(module_id)
+
+    return module_to_file, dict(addr_to_modules)
+
+
+def _parse_hook_address(addr_raw: object) -> Optional[int]:
+    if addr_raw is None:
+        return None
+    addr_s = str(addr_raw).strip()
+    if not addr_s:
+        return None
+    try:
+        if addr_s.startswith("0x"):
+            return int(addr_s, 16)
+        if addr_s.startswith("$"):
+            return int(addr_s[1:], 16)
+        return int(addr_s, 0)
+    except ValueError:
+        return None
+
+
+def _build_name_to_addrs(labels: dict[int, str]) -> dict[str, set[int]]:
+    name_to_addrs: dict[str, set[int]] = defaultdict(set)
+    for addr, label in labels.items():
+        variants = {label, label.lower()}
+        if label.startswith("Oracle_"):
+            stripped = label[len("Oracle_"):]
+            variants.add(stripped)
+            variants.add(stripped.lower())
+        for name in variants:
+            name_to_addrs[name].add(addr)
+    return dict(name_to_addrs)
+
+
+def _is_numeric_target_name(target: str) -> bool:
+    if not target:
+        return False
+    if target.startswith("$") or target.startswith("0x"):
+        return True
+    try:
+        int(target, 0)
+        return True
+    except ValueError:
+        return False
+
+
+def check_hook_target_ownership(
+    hooks_path: Optional[Path],
+    sym_path: Optional[Path],
+    labels: dict[int, str],
+) -> list[dict]:
+    """Validate that hook target routines resolve into expected module ownership.
+
+    This catches silent overwrite scenarios where a hook still resolves symbolically
+    but the bytes at the target address are owned by an unrelated source module.
+    """
+    if hooks_path is None or sym_path is None or not hooks_path.exists() or not sym_path.exists() or not labels:
+        return []
+
+    module_to_file, addr_to_modules = parse_wla_sym_source_map(sym_path)
+    if not module_to_file or not addr_to_modules:
+        return []
+
+    name_to_addrs = _build_name_to_addrs(labels)
+    issues: list[dict] = []
+    seen: set[tuple[int, str, str]] = set()
+
+    with hooks_path.open(encoding="utf-8", errors="replace") as f:
+        hooks_data = json.load(f)
+
+    for hook in hooks_data.get("hooks", []):
+        kind = str(hook.get("kind", "")).lower()
+        if kind not in {"jsl", "jsr", "jml", "jmp"}:
+            continue
+
+        hook_name = str(hook.get("name", ""))
+        if hook_name in HOOK_TARGET_OWNER_ALLOWLIST:
+            continue
+
+        target = str(hook.get("target", "")).strip()
+        if not target or target.startswith(".") or _is_numeric_target_name(target):
+            continue
+
+        module = str(hook.get("module", "")).strip()
+        if not module:
+            continue
+
+        hook_addr = _parse_hook_address(hook.get("address"))
+        if hook_addr is None:
+            continue
+
+        target_addrs = name_to_addrs.get(target) or name_to_addrs.get(target.lower())
+        if not target_addrs:
+            continue
+
+        owner_roots: set[str] = set()
+        owner_files: set[str] = set()
+        resolved_addrs: list[int] = []
+
+        for addr in sorted(target_addrs):
+            module_ids = addr_to_modules.get(addr)
+            if not module_ids:
+                continue
+            resolved_addrs.append(addr)
+            for module_id in module_ids:
+                source_file = module_to_file.get(module_id)
+                if not source_file:
+                    continue
+                owner_files.add(source_file)
+                owner_roots.add(source_file.split("/", 1)[0])
+
+        if not resolved_addrs:
+            continue
+
+        if module in owner_roots:
+            continue
+
+        key = (hook_addr, hook_name, target)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        hook_label = labels.get(hook_addr, f"${hook_addr:06X}")
+        issues.append({
+            "severity": "error",
+            "message": (
+                f"Hook target ownership mismatch at {hook_label}: "
+                f"target '{target}' resolves outside module '{module}' "
+                f"(owners: {', '.join(sorted(owner_roots))})"
+            ),
+            "address": hook_addr,
+            "context": {
+                "hook_name": hook_name,
+                "hook_kind": kind,
+                "hook_module": module,
+                "target": target,
+                "resolved_target_addrs": [f"${a:06X}" for a in resolved_addrs[:8]],
+                "owner_files": sorted(owner_files)[:8],
+                "allowlist_hint": "If this cross-module target is intentional, add the hook name to HOOK_TARGET_OWNER_ALLOWLIST.",
+            },
+        })
+
+    return issues
 
 
 def _read_vector(rom_data: bytes, vector_addr: int, mapper: str = 'lorom') -> Optional[int]:
@@ -398,6 +594,7 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
     hook_abi_issues = check_hook_abi(tracker, labels, hooks_to_analyze, exit_expectations, hook_meta)
     width_stack_imbalances = find_width_dependent_stack_imbalance(rom_data, tracker, labels, hook_meta)
     sprite_table_overflow = find_sprite_table_overflow(rom_data)
+    hook_target_owner_issues = check_hook_target_ownership(hooks_path, sym_path, labels)
     phb_plb_issues = check_phb_plb_pairing(rom_data, tracker, labels)
     jsl_target_issues = check_jsl_targets(rom_data, labels)
     rtl_rts_issues = check_rtl_rts_consistency(tracker, labels)
@@ -413,6 +610,7 @@ def analyze_oracle_rom(rom_path: Path, sym_path: Optional[Path] = None, hooks_pa
         hook_abi_issues=hook_abi_issues,
         width_stack_imbalances=width_stack_imbalances,
         sprite_table_overflow=sprite_table_overflow,
+        hook_target_owner_issues=hook_target_owner_issues,
         phb_plb_issues=phb_plb_issues,
         jsl_target_issues=jsl_target_issues,
         rtl_rts_issues=rtl_rts_issues,
@@ -1473,6 +1671,7 @@ def main():
 
     if args.check_hooks or not any_filter:
         all_diags.extend(result.hook_violations)
+        all_diags.extend(result.hook_target_owner_issues)
 
     if args.find_mx or not any_filter:
         all_diags.extend(result.mx_mismatches)
@@ -1555,6 +1754,7 @@ def main():
                 'hook_abi_issues': len(result.hook_abi_issues),
                 'width_stack_imbalances': len(result.width_stack_imbalances),
                 'sprite_table_overflow': len(result.sprite_table_overflow),
+                'hook_target_owner_issues': len(result.hook_target_owner_issues),
                 'phb_plb_issues': len(result.phb_plb_issues),
                 'jsl_target_issues': len(result.jsl_target_issues),
                 'rtl_rts_issues': len(result.rtl_rts_issues),
@@ -1622,6 +1822,8 @@ def main():
             print(f"Width-dependent stack imbalances: {len(result.width_stack_imbalances)}")
         if args.check_sprite_tables or result.sprite_table_overflow:
             print(f"Sprite table overflows: {len(result.sprite_table_overflow)}")
+        if args.check_hooks or result.hook_target_owner_issues:
+            print(f"Hook target ownership issues: {len(result.hook_target_owner_issues)}")
         if args.check_phb_plb or result.phb_plb_issues:
             print(f"PHB/PLB pairing issues: {len(result.phb_plb_issues)}")
         if args.check_jsl_targets or result.jsl_target_issues:

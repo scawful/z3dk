@@ -532,3 +532,153 @@ class TestOracleAnalyzerHelpers:
             assert "oracle_pos0_Data" not in str(m.get("message", "")), (
                 f"Data-like label oracle_pos0_Data should be skipped, got: {m}"
             )
+
+
+class TestHookTargetOwnership:
+    """Guardrails for hook target/source ownership using WLA source-map data."""
+
+    def test_parse_wla_sym_source_map_sections(self, tmp_path: Path):
+        try:
+            from oracle_analyzer import parse_wla_sym_source_map
+        except ImportError:
+            pytest.skip("oracle_analyzer not importable")
+
+        sym_path = tmp_path / "mini.sym"
+        sym_path.write_text(
+            "\n".join(
+                [
+                    "; wla symbolic information file",
+                    "[labels]",
+                    "2C:C000 Oracle_CustomRoomCollision",
+                    "",
+                    "[source files]",
+                    "0019 aaaaaaaa Dungeons/Collision/custom_collision.asm",
+                    "0059 bbbbbbbb Sprites/Bosses/lanmola_Expanded.asm",
+                    "",
+                    "[rom checksum]",
+                    "00000000",
+                    "",
+                    "[addr-to-line mapping]",
+                    "2C:C000 0059:00000010",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        module_to_file, addr_to_modules = parse_wla_sym_source_map(sym_path)
+        assert module_to_file[0x0019] == "Dungeons/Collision/custom_collision.asm"
+        assert module_to_file[0x0059] == "Sprites/Bosses/lanmola_Expanded.asm"
+        assert addr_to_modules[0x2CC000] == {0x0059}
+
+    def test_check_hook_target_ownership_flags_overwrite_pattern(self, tmp_path: Path):
+        try:
+            from oracle_analyzer import check_hook_target_ownership
+        except ImportError:
+            pytest.skip("oracle_analyzer not importable")
+
+        hooks_path = tmp_path / "hooks.json"
+        hooks_path.write_text(
+            """
+{
+  "hooks": [
+    {
+      "name": "CustomRoomCollision",
+      "address": "0x01B95B",
+      "kind": "jsl",
+      "module": "Dungeons",
+      "target": "CustomRoomCollision",
+      "source": "Dungeons/Collision/custom_collision.asm:20"
+    }
+  ]
+}
+            """.strip(),
+            encoding="utf-8",
+        )
+
+        sym_path = tmp_path / "mini.sym"
+        sym_path.write_text(
+            "\n".join(
+                [
+                    "; wla symbolic information file",
+                    "[labels]",
+                    "2C:C000 Oracle_CustomRoomCollision",
+                    "",
+                    "[source files]",
+                    "0019 aaaaaaaa Dungeons/Collision/custom_collision.asm",
+                    "0059 bbbbbbbb Sprites/Bosses/lanmola_Expanded.asm",
+                    "",
+                    "[rom checksum]",
+                    "00000000",
+                    "",
+                    "[addr-to-line mapping]",
+                    "2C:C000 0059:00000010",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        labels = {
+            0x01B95B: "HookSite",
+            0x2CC000: "Oracle_CustomRoomCollision",
+        }
+        issues = check_hook_target_ownership(hooks_path, sym_path, labels)
+        assert len(issues) == 1
+        assert issues[0]["severity"] == "error"
+        assert issues[0]["address"] == 0x01B95B
+        assert "ownership mismatch" in issues[0]["message"]
+
+    def test_check_hook_target_ownership_allowlist_suppresses_known_cross_module(self, tmp_path: Path):
+        try:
+            from oracle_analyzer import check_hook_target_ownership
+        except ImportError:
+            pytest.skip("oracle_analyzer not importable")
+
+        hooks_path = tmp_path / "hooks.json"
+        hooks_path.write_text(
+            """
+{
+  "hooks": [
+    {
+      "name": "Graphics_Transfer",
+      "address": "0x02BE5E",
+      "kind": "jsl",
+      "module": "Core",
+      "target": "Graphics_Transfer",
+      "source": "Core/patches.asm:36"
+    }
+  ]
+}
+            """.strip(),
+            encoding="utf-8",
+        )
+
+        sym_path = tmp_path / "mini.sym"
+        sym_path.write_text(
+            "\n".join(
+                [
+                    "; wla symbolic information file",
+                    "[labels]",
+                    "30:F000 Oracle_Graphics_Transfer",
+                    "",
+                    "[source files]",
+                    "0039 cccccccc Sprites/all_sprites.asm",
+                    "",
+                    "[rom checksum]",
+                    "00000000",
+                    "",
+                    "[addr-to-line mapping]",
+                    "30:F000 0039:00000010",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        labels = {
+            0x02BE5E: "HookSite",
+            0x30F000: "Oracle_Graphics_Transfer",
+        }
+        issues = check_hook_target_ownership(hooks_path, sym_path, labels)
+        assert issues == []

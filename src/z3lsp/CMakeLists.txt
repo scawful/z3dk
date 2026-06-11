@@ -9,6 +9,7 @@ add_library(z3lsp-lib STATIC
 	mesen_client.cc
 	parser.cc
 	knowledge.cc
+	lsp_handlers.cc
 )
 
 target_link_libraries(z3lsp-lib PUBLIC z3dk-core)

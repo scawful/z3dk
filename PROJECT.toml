@@ -18,7 +18,7 @@ github = "https://github.com/scawful/zAsar"
 command = "cmake -B build && cmake --build build -j8"
 
 [test]
-command = "./run_tests.sh"
+command = "./tests/scripts/run_tests.sh"
 
 [sync]
 type = "git"

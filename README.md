@@ -96,6 +96,17 @@ z3disasm --rom game.sfc --symbols game.mlb --bank-start 02 --bank-end 02 --out s
 - **VS Code:** Install the extension in `extensions/vscode-z3dk`.
 - **Neovim:** Configure `lspconfig` to use `z3lsp`.
 
+### 5. Verification
+
+```bash
+# Full regression suite
+./tests/scripts/run_tests.sh
+
+# Python-focused suites
+pytest -q tests/z3dk
+pytest -q tests/asar_compat/test_asar_syntax.py
+```
+
 ## Documentation
 
 - **Z3ASM overview:** `docs/newbook/src/z3asm.md`

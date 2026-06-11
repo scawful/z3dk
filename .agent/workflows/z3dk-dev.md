@@ -19,7 +19,7 @@ This workflow describes how to build and verify the z3dk tools (z3asm, z3disasm,
 
 2. Run the main regression test suite:
    ```bash
-   ./run_tests.sh
+   ./tests/scripts/run_tests.sh
    ```
 
 3. Test specific ALTTP features in z3asm:

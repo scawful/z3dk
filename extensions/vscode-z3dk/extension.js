@@ -3,6 +3,19 @@ const os = require('os');
 const path = require('path');
 const { exec } = require('child_process');
 const vscode = require('vscode');
+const {
+  stripTomlComment,
+  parseTomlString,
+  parseTomlStringArray
+} = require('./lib/toml-utils');
+const {
+  formatBytes,
+  parseCsvLine,
+  parseCsv,
+  escapeHtml,
+  applyTemplate,
+  expandArgs
+} = require('./lib/text-utils');
 
 let LanguageClient;
 
@@ -70,125 +83,6 @@ function expandHome(inputPath) {
 }
 
 const z3dkTomlCache = new Map();
-
-function stripTomlComment(line) {
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const c = line[i];
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (c === '\\') {
-      escape = true;
-      continue;
-    }
-    if (c === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (!inString && c === '#') {
-      return line.slice(0, i);
-    }
-  }
-  return line;
-}
-
-function unescapeTomlString(value) {
-  let output = '';
-  let escape = false;
-  for (const c of value) {
-    if (escape) {
-      switch (c) {
-        case 'n':
-          output += '\n';
-          break;
-        case 't':
-          output += '\t';
-          break;
-        case 'r':
-          output += '\r';
-          break;
-        case '\\':
-        case '"':
-          output += c;
-          break;
-        default:
-          output += c;
-          break;
-      }
-      escape = false;
-    } else if (c === '\\') {
-      escape = true;
-    } else {
-      output += c;
-    }
-  }
-  return output;
-}
-
-function parseTomlString(value) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
-    return unescapeTomlString(trimmed.slice(1, -1));
-  }
-  return trimmed;
-}
-
-function parseTomlStringArray(value) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return [];
-  }
-  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
-    const single = parseTomlString(trimmed);
-    return single ? [single] : [];
-  }
-  const inner = trimmed.slice(1, -1);
-  const result = [];
-  let current = '';
-  let inString = false;
-  let escape = false;
-  for (const c of inner) {
-    if (escape) {
-      current += c;
-      escape = false;
-      continue;
-    }
-    if (c === '\\') {
-      escape = true;
-      continue;
-    }
-    if (c === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (!inString && c === ',') {
-      const token = current.trim();
-      if (token) {
-        const valueToken = parseTomlString(token);
-        if (valueToken) {
-          result.push(valueToken);
-        }
-      }
-      current = '';
-      continue;
-    }
-    current += c;
-  }
-  const token = current.trim();
-  if (token) {
-    const valueToken = parseTomlString(token);
-    if (valueToken) {
-      result.push(valueToken);
-    }
-  }
-  return result;
-}
 
 function resolveProjectRoot() {
   const config = vscode.workspace.getConfiguration('z3dk');
@@ -491,19 +385,6 @@ function resolveMainAsmPath(tomlConfig) {
     return path.join(rootDir, candidates[0]);
   }
   return '';
-}
-
-function formatBytes(size) {
-  if (!Number.isFinite(size) || size <= 0) {
-    return '';
-  }
-  if (size >= 1024 * 1024) {
-    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
-  }
-  if (size >= 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  }
-  return `${size} B`;
 }
 
 function scanRomDir(dir, out) {
@@ -851,50 +732,6 @@ function resolveLabelIndexCandidates(config, context) {
     path.join(root, '.context', 'knowledge', 'label_index_all.csv'),
     path.join(root, '.context', 'knowledge', 'label_index.csv')
   ];
-}
-
-function parseCsvLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 1;
-        continue;
-      }
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-      continue;
-    }
-    current += char;
-  }
-  result.push(current);
-  return result;
-}
-
-function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-  if (lines.length === 0) {
-    return [];
-  }
-  const headers = parseCsvLine(lines[0]);
-  const rows = [];
-  for (const line of lines.slice(1)) {
-    const values = parseCsvLine(line);
-    const row = {};
-    headers.forEach((header, index) => {
-      row[header] = values[index] || '';
-    });
-    rows.push(row);
-  }
-  return rows;
 }
 
 function loadLabelIndexFile(indexPath) {
@@ -1292,34 +1129,6 @@ async function openLabelEntry(entry, config, context) {
     editor.selection = new vscode.Selection(position, position);
     editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
   }
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function applyTemplate(value, replacements) {
-  if (!value) {
-    return '';
-  }
-  let output = value;
-  for (const [key, replacement] of Object.entries(replacements)) {
-    const safeValue = replacement || '';
-    output = output.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), safeValue);
-  }
-  return output;
-}
-
-function expandArgs(args, replacements) {
-  if (!Array.isArray(args)) {
-    return [];
-  }
-  return args.map(arg => applyTemplate(arg, replacements));
 }
 
 function buildLaunchCommand(executable, args) {

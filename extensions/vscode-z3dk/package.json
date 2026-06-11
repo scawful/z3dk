@@ -603,7 +603,7 @@
         },
         "z3dk.testCommand": {
           "type": "string",
-          "default": "./run_tests.sh",
+          "default": "./tests/scripts/run_tests.sh",
           "description": "Command to run z3dk regression tests."
         },
         "z3dk.yazePath": {

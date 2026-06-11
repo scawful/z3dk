@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 
 project(Z3DK)
+enable_testing()
 
 # When using Homebrew LLVM/Clang on macOS, link against its libc++ to avoid
 # ABI mismatches (e.g. missing std::__1::__hash_memory with system libc++).

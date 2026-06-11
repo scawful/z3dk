@@ -2,12 +2,12 @@ name: CMake
 
 on:
   push:
-    branches: [ master, asar_19, asar_2_beta ]
+    branches: [ main, master, asar_19, asar_2_beta ]
     paths-ignore:
       - 'docs/**'
       - 'ext/**'
   pull_request:
-    branches: [ master, asar_19, asar_2_beta ]
+    branches: [ main, master, asar_19, asar_2_beta ]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -32,10 +32,35 @@ jobs:
         fetch-depth: 0
 
     - name: Configure CMake
-      run: cmake -S ${{github.workspace}}/src -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{ matrix.generator }} ${{ matrix.toolset }}
+      run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{ matrix.generator }} ${{ matrix.toolset }}
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
     - name: Tests
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target run-tests
+
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install test deps
+      run: python -m pip install --upgrade pip pytest
+
+    - name: Build z3asm
+      run: |
+        cmake -S ${{github.workspace}} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        cmake --build ${{github.workspace}}/build --target z3asm --config ${{env.BUILD_TYPE}}
+
+    - name: Python tests
+      run: |
+        pytest -q tests/z3dk
+        pytest -q tests/asar_compat/test_asar_syntax.py

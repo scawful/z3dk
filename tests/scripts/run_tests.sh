@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")"/.. && pwd)"
+ROOT="$(cd "$(dirname "$0")"/../.. && pwd)"
 BUILD_DIR="${Z3DK_BUILD_DIR:-${ROOT}/build}"
 CMAKE_ARGS=()
 
@@ -13,12 +13,12 @@ elif [[ "$(uname)" == "Darwin" ]]; then
 fi
 
 # Pre-flight check
-if [[ ! -f "${ROOT}/data/dummy_rom.sfc" ]]; then
-    echo "Error: dummy_rom.sfc not found in ${ROOT}"
-    echo "Run 'git restore dummy_rom.sfc' or recreate it."
+if [[ ! -f "${ROOT}/tests/asar/asar_data/dummy_rom.sfc" ]]; then
+    echo "Error: dummy_rom.sfc not found in ${ROOT}/tests/asar/asar_data"
+    echo "Restore tests/asar/asar_data/dummy_rom.sfc or recreate it."
     exit 1
 fi
 
 mkdir -p "${BUILD_DIR}"
-cmake -S "${ROOT}/.." -B "${BUILD_DIR}" "${CMAKE_ARGS[@]}"
+cmake -S "${ROOT}" -B "${BUILD_DIR}" "${CMAKE_ARGS[@]}"
 cmake --build "${BUILD_DIR}" --target run-tests

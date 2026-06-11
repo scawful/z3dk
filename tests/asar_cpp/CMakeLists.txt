@@ -86,6 +86,15 @@ set(CXX_EXTENSIONS OFF)
 
 # Bindings live in src/bindings/c when asar_cpp is under tests/asar_cpp (included from src/)
 set(ASAR_BINDINGS_C "${CMAKE_SOURCE_DIR}/src/bindings/c")
+set(ASAR_TEST_SUITE_DIR "${CMAKE_CURRENT_BINARY_DIR}/asar-suite")
+set(ASAR_TEST_ROM "${ASAR_TEST_SUITE_DIR}/asar_data/dummy_rom.sfc")
+
+# Keep test fixtures in the build dir so tests remain stable regardless of
+# source-tree layout changes (legacy tests reference data/* assets).
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../asar/" DESTINATION "${ASAR_TEST_SUITE_DIR}")
+if(EXISTS "${ASAR_TEST_SUITE_DIR}/asar_data")
+	file(COPY "${ASAR_TEST_SUITE_DIR}/asar_data/" DESTINATION "${ASAR_TEST_SUITE_DIR}/data")
+endif()
 
 add_custom_target(run-tests)
 set_property(TARGET run-tests PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
@@ -94,23 +103,25 @@ if(ASAR_GEN_EXE_TEST)
 	add_executable(
 		asar-app-test
 		
-		"${CMAKE_CURRENT_SOURCE_DIR}/test.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test.cc"
 	)
 
 	set_asar_test_shared_properties(asar-app-test)
 
 	add_custom_target(run-app-test
-		asar-app-test "$<TARGET_FILE:z3asm>" "${CMAKE_CURRENT_SOURCE_DIR}/../asar" "${CMAKE_CURRENT_SOURCE_DIR}/../asar/data/dummy_rom.sfc" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-app"
+		asar-app-test "$<TARGET_FILE:z3asm>" "${ASAR_TEST_SUITE_DIR}" "${ASAR_TEST_ROM}" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-app"
 		VERBATIM)
 	add_dependencies(run-tests run-app-test)
 	set_property(TARGET run-app-test PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
+	add_test(NAME asar_app_test
+		COMMAND asar-app-test "$<TARGET_FILE:z3asm>" "${ASAR_TEST_SUITE_DIR}" "${ASAR_TEST_ROM}" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-app")
 endif()
 
 if(ASAR_GEN_DLL_TEST)
 	add_executable(
 		asar-dll-test
 		
-		"${CMAKE_CURRENT_SOURCE_DIR}/test.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test.cc"
 		
 		"${ASAR_BINDINGS_C}/asardll.c"
 		"${ASAR_BINDINGS_C}/asardll.h"
@@ -122,23 +133,27 @@ if(ASAR_GEN_DLL_TEST)
 	set_asar_test_shared_properties(asar-dll-test)
 
 	add_custom_target(run-dll-test
-		asar-dll-test "$<TARGET_FILE:libz3dk>" "${CMAKE_CURRENT_SOURCE_DIR}/../asar" "${CMAKE_CURRENT_SOURCE_DIR}/../asar/data/dummy_rom.sfc" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-dll"
+		asar-dll-test "$<TARGET_FILE:libz3dk>" "${ASAR_TEST_SUITE_DIR}" "${ASAR_TEST_ROM}" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-dll"
 		VERBATIM)
 	add_dependencies(run-tests run-dll-test)
 	set_property(TARGET run-dll-test PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
+	add_test(NAME asar_dll_test
+		COMMAND asar-dll-test "$<TARGET_FILE:libz3dk>" "${ASAR_TEST_SUITE_DIR}" "${ASAR_TEST_ROM}" "${CMAKE_CURRENT_BINARY_DIR}/tests-tmp-dll")
 
 	add_executable(newtest
-		"${CMAKE_CURRENT_SOURCE_DIR}/newtest.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/newtest.cc"
 		"${ASAR_BINDINGS_C}/asardll.c"
 		"${ASAR_BINDINGS_C}/asardll.h")
 	target_include_directories(newtest PRIVATE "${ASAR_BINDINGS_C}/")
 	set_asar_test_shared_properties(newtest)
 
 	add_custom_target(run-newtest
-		newtest "$<TARGET_FILE:libz3dk>" "${CMAKE_CURRENT_SOURCE_DIR}/../asar" "${CMAKE_CURRENT_SOURCE_DIR}/../asar/data/dummy_rom.sfc"
+		newtest "$<TARGET_FILE:libz3dk>" "${ASAR_TEST_SUITE_DIR}" "${ASAR_TEST_ROM}"
 		VERBATIM)
 	add_dependencies(run-tests run-newtest)
 	set_property(TARGET run-newtest PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
+	add_test(NAME asar_newtest
+		COMMAND newtest "$<TARGET_FILE:libz3dk>" "${ASAR_TEST_SUITE_DIR}" "${ASAR_TEST_ROM}")
 
 	if(ASAR_USE_SANITIZER)
 		target_compile_options(asar-dll-test PRIVATE -fsanitize=address -fsanitize=undefined)
@@ -164,7 +179,7 @@ if(ASAR_GEN_DLL_TEST)
 		set(ASAR_CS_SOURCES "")
 		list(APPEND ASAR_CS_SOURCES
 			"${CMAKE_CURRENT_SOURCE_DIR}/interface-tests/test.cs"
-			"${CMAKE_CURRENT_SOURCE_DIR}/../bindings/c_sharp/asar.cs"
+			"${CMAKE_SOURCE_DIR}/src/bindings/c_sharp/asar.cs"
 		)
 
 		if(CMAKE_GENERATOR MATCHES "Visual Studio")

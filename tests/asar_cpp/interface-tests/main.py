@@ -4,7 +4,11 @@ import sys
 import unittest
 import tempfile
 
-sys.path += [os.path.join(os.path.dirname(__file__), "../../bindings/python")]
+_here = os.path.dirname(__file__)
+sys.path += [
+    os.path.join(_here, "../../bindings/python"),
+    os.path.join(_here, "../../../src/bindings/python"),
+]
 import asar
 
 asar_dll_path = None

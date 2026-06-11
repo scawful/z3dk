@@ -22,6 +22,8 @@ struct LintOptions {
   bool warn_org_collision = true;
   bool warn_unused_symbols = true;
   bool warn_unauthorized_hook = true;
+  bool warn_stack_balance = true;
+  bool warn_hook_return = true;
   int warn_bank_full_percent = 0; // e.g. 95 for 95%
   std::vector<Hook> known_hooks;
   std::vector<MemoryRange> prohibited_memory_ranges;

@@ -35,6 +35,8 @@ struct Config {
   std::optional<bool> warn_unknown_width;
   std::optional<bool> warn_org_collision;
   std::optional<bool> warn_unauthorized_hook;
+  std::optional<bool> warn_stack_balance;
+  std::optional<bool> warn_hook_return;
 };
 
 Config LoadConfigFile(const std::string& path, std::string* error);

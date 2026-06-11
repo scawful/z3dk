@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include "z3dk_core/opcode_table.h"
@@ -75,6 +77,30 @@ void AddDiagnostic(LintResult* out, DiagnosticSeverity severity,
 
 bool IsOrgCollisionEnabled(const LintOptions& options) {
   return options.warn_org_collision;
+}
+
+bool IsPushMnemonic(std::string_view mn) {
+  return mn == "PHA" || mn == "PHX" || mn == "PHY" ||
+         mn == "PHB" || mn == "PHK" || mn == "PHP" || mn == "PHD";
+}
+
+bool IsPullMnemonic(std::string_view mn) {
+  return mn == "PLA" || mn == "PLX" || mn == "PLY" ||
+         mn == "PLB" || mn == "PLP" || mn == "PLD";
+}
+
+bool IsReturnMnemonic(std::string_view mn) {
+  return mn == "RTS" || mn == "RTL" || mn == "RTI";
+}
+
+bool IsHookAddress(const std::vector<Hook>& hooks, uint32_t address) {
+  for (const auto& hook : hooks) {
+    if (address >= hook.address &&
+        address < hook.address + std::max(1, hook.size)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -221,6 +247,14 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
     widths.m_known = options.default_m_width_bytes > 0;
     widths.x_known = options.default_x_width_bytes > 0;
 
+    // Stack balance tracking
+    int stack_depth = 0;
+    uint32_t routine_start = snes;
+    uint8_t last_opcode = 0;
+    bool block_is_hook = !options.known_hooks.empty() &&
+                         IsHookAddress(options.known_hooks,
+                                       static_cast<uint32_t>(block.snes_offset));
+
     while (pc < end) {
       uint8_t opcode = result.rom_data[pc];
       
@@ -283,6 +317,52 @@ LintResult RunLint(const AssembleResult& result, const LintOptions& options) {
                         sources);
         }
       }
+
+      // Stack balance and return type checks
+      std::string_view mn(info.mnemonic);
+      if (options.warn_stack_balance) {
+        if (IsPushMnemonic(mn)) {
+          stack_depth++;
+        } else if (IsPullMnemonic(mn)) {
+          stack_depth--;
+          if (stack_depth < 0) {
+            char buf[128];
+            std::snprintf(buf, sizeof(buf),
+                          "Stack underflow: more pulls than pushes at $%06X",
+                          snes);
+            AddDiagnostic(&out, DiagnosticSeverity::kWarning, buf, snes,
+                          sources);
+            stack_depth = 0;
+          }
+        }
+
+        if (IsReturnMnemonic(mn) && stack_depth != 0) {
+          char buf[128];
+          std::snprintf(buf, sizeof(buf),
+                        "Stack imbalance at %s ($%06X): net depth %+d "
+                        "(routine started at $%06X)",
+                        info.mnemonic, snes, stack_depth, routine_start);
+          AddDiagnostic(&out, DiagnosticSeverity::kWarning, buf, snes, sources);
+        }
+
+        if (IsReturnMnemonic(mn)) {
+          stack_depth = 0;
+          routine_start = snes + 1 + static_cast<uint32_t>(operand_size);
+        }
+      }
+
+      if (options.warn_hook_return && block_is_hook && IsReturnMnemonic(mn)) {
+        if (mn == "RTS") {
+          char buf[128];
+          std::snprintf(buf, sizeof(buf),
+                        "Hook at $%06X returns with RTS instead of RTL "
+                        "(hooks are called via JSL/JML)",
+                        static_cast<uint32_t>(block.snes_offset));
+          AddDiagnostic(&out, DiagnosticSeverity::kWarning, buf, snes, sources);
+        }
+      }
+
+      last_opcode = opcode;
 
       if (info.mnemonic == std::string("REP") && operand_size == 1) {
         uint8_t mask = result.rom_data[pc + 1];

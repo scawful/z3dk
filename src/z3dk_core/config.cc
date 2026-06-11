@@ -383,6 +383,10 @@ Config LoadConfigFile(const std::string& path, std::string* error) {
       config.warn_org_collision = ParseBool(value);
     } else if (key == "warn_unauthorized_hook") {
       config.warn_unauthorized_hook = ParseBool(value);
+    } else if (key == "warn_stack_balance") {
+      config.warn_stack_balance = ParseBool(value);
+    } else if (key == "warn_hook_return") {
+      config.warn_hook_return = ParseBool(value);
     } else if (key == "prohibited_memory_ranges") {
       ApplyArrayKey(&config, key, value);
     }

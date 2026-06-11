@@ -150,25 +150,29 @@ set(ASAR_SHARED_SOURCE_FILES "")
 list(
 	APPEND ASAR_SHARED_SOURCE_FILES
 
-	"${CMAKE_CURRENT_SOURCE_DIR}/addr2line.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/arch-65816.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/arch-spc700.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/arch-superfx.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/assembleblock.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/crc32.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/libcon.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/libsmw.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/libstr.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/macro.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/asar_math.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/virtualfile.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/warnings.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/errors.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/table.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/unicode.cpp"
+	"${CMAKE_CURRENT_SOURCE_DIR}/addr2line.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/arch-65816.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/arch-spc700.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/arch-superfx.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/assembleblock.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/callstack.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/crc32.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/defines_pipeline.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/libcon.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/libsmw.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/libstr.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/line_logic.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/macro.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/main.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/asar_math.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/source_pipeline.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/virtualfile.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/warnings.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/errors.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/table.cc"
+	"${CMAKE_CURRENT_SOURCE_DIR}/unicode.cc"
 
-	"${CMAKE_CURRENT_SOURCE_DIR}/platform/file-helpers.cpp"
+	"${CMAKE_CURRENT_SOURCE_DIR}/platform/file-helpers.cc"
 
 	# Not required in here, but useful so they're add to your VS solution
 	"${CMAKE_CURRENT_SOURCE_DIR}/addr2line.h"
@@ -176,9 +180,11 @@ list(
 	"${CMAKE_CURRENT_SOURCE_DIR}/assocarr.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/autoarray.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/crc32.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/defines_pipeline.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/libcon.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/libmisc.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/libsmw.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/line_logic.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/libstr.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/warnings.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/errors.h"
@@ -193,6 +199,7 @@ list(
 	"${CMAKE_CURRENT_SOURCE_DIR}/interface-lib.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/std-includes.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/platform/file-helpers.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/source_pipeline.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/platform/thread-helpers.h"
 )
 
@@ -206,7 +213,7 @@ if(WIN32)
 	list(
 		APPEND ASAR_SHARED_SOURCE_FILES
 
-		"${CMAKE_CURRENT_SOURCE_DIR}/platform/windows/file-helpers-win32.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/platform/windows/file-helpers-win32.cc"
 		"${CMAKE_CURRENT_SOURCE_DIR}/platform/windows/thread-helpers-win32.h"
 	)
 
@@ -226,7 +233,7 @@ elseif(UNIX)
 	list(
 		APPEND ASAR_SHARED_SOURCE_FILES
 
-		"${CMAKE_CURRENT_SOURCE_DIR}/platform/linux/file-helpers-linux.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/platform/linux/file-helpers-linux.cc"
 		"${CMAKE_CURRENT_SOURCE_DIR}/platform/generic/thread-helpers-pthread.h"
 	)
 else()
@@ -234,7 +241,7 @@ else()
 	list(
 		APPEND ASAR_SHARED_SOURCE_FILES
 
-		"${CMAKE_CURRENT_SOURCE_DIR}/platform/generic/file-helpers-generic.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/platform/generic/file-helpers-generic.cc"
 		"${CMAKE_CURRENT_SOURCE_DIR}/platform/generic/thread-helpers-pthread.h"
 	)
 endif()
@@ -281,7 +288,7 @@ if(ASAR_GEN_DLL)
 	add_library(
 		libz3dk SHARED
 
-		"${CMAKE_CURRENT_SOURCE_DIR}/interface-lib.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/interface-lib.cc"
 
 		${ASAR_SHARED_SOURCE_FILES}
 		${ASAR_LIB_RESOURCE_FILES}
@@ -316,7 +323,7 @@ endif(ASAR_GEN_DLL)
 if (ASAR_GEN_LIB)
 	add_library(
 		libz3dk-static STATIC
-		"${CMAKE_CURRENT_SOURCE_DIR}/interface-lib.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/interface-lib.cc"
 
 		${ASAR_SHARED_SOURCE_FILES}
 		${ASAR_LIB_RESOURCE_FILES}

@@ -29,6 +29,8 @@ macro(set_asar_test_shared_properties target)
 			/wd4267 # implicit conversion loses precision
 			/wd4800 # implicit conversion to bool
 		)
+		# The DLL runs on the host's stack; match the z3asm executable.
+		target_link_options(${target} PRIVATE /STACK:4194304)
 
 		if(CMAKE_VS_PLATFORM_TOOLSET MATCHES "^LLVM-.*$" OR CMAKE_VS_PLATFORM_TOOLSET STREQUAL "llvm" OR CMAKE_VS_PLATFORM_TOOLSET STREQUAL "ClangCL")
 			target_compile_options(${target} PRIVATE

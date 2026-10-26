@@ -174,6 +174,14 @@ if(ASAR_GEN_DLL_TEST)
 		set_property(TARGET run-interface-test PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
 	endif()
 
+	if(ASAR_GEN_CS_TEST AND NOT CMAKE_GENERATOR MATCHES "Visual Studio")
+		find_program(ASAR_CS_COMPILER NAMES csc mono-csc mcs)
+		if(NOT ASAR_CS_COMPILER)
+			message(STATUS "No C# compiler (csc/mono-csc/mcs) found; skipping the C# interface test")
+			set(ASAR_GEN_CS_TEST OFF)
+		endif()
+	endif()
+
 	if(ASAR_GEN_CS_TEST)
 
 		set(ASAR_CS_SOURCES "")

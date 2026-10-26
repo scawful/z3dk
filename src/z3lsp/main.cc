@@ -895,12 +895,9 @@ json BuildSemanticTokens(const DocumentState& doc) {
       if (c == '$' || c == '%') {
         size_t start = i;
         bool allow_token = true;
-        if (c == '$' && start > 0) {
-          char prev = code[start - 1];
-          if (prev == '#') {
-            // Skip immediate constants like #$xx/#$xxxx to reduce noisy highlights.
-            allow_token = false;
-          }
+        if (c == '$' &&
+            z3lsp::IsImmediateOperand(std::string_view(code).substr(0, start))) {
+          allow_token = false;
         }
         ++i;
         size_t digits = 0;
@@ -1305,10 +1302,12 @@ int main(int argc, char** argv) {
         const auto& doc = documents[uri];
         int line = 0;
         int col = 0;
+        size_t line_start = 0;
         for (size_t i = 0; i < doc.text.size(); ++i) {
              if (doc.text[i] == '\n') {
                  line++;
                  col = 0;
+                 line_start = i + 1;
                  continue;
              }
              if (line > end_line) break;
@@ -1322,7 +1321,9 @@ int main(int argc, char** argv) {
                  size_t len = j - (i + 1);
                  
                  // Only hint fully-qualified long addresses ($xxxxxx)
-                 if (len == 6 && line >= start_line) {
+                 if (len == 6 && line >= start_line &&
+                     !z3lsp::IsImmediateOperand(std::string_view(doc.text).substr(
+                         line_start, i - line_start))) {
                      std::string hex = doc.text.substr(i + 1, len);
                      try {
                          uint32_t addr = std::stoul(hex, nullptr, 16);

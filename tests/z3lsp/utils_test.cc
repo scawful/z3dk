@@ -19,10 +19,12 @@
 
 // Forward declarations
 void TestFindReferences();
+void TestIsImmediateOperand();
 
 int main() {
     std::cout << "Running z3lsp utils tests..." << std::endl;
     TestFindReferences();
+    TestIsImmediateOperand();
     std::cout << "All tests passed!" << std::endl;
     return 0;
 }
@@ -67,4 +69,22 @@ Label:
     
     // Line 6: dw Label
     ASSERT_EQ(refs[2].line, 6);
+}
+
+void TestIsImmediateOperand() {
+    using z3lsp::IsImmediateOperand;
+
+    ASSERT_TRUE(IsImmediateOperand("  LDA.w #"));
+    ASSERT_TRUE(IsImmediateOperand("  CMP #"));
+    ASSERT_TRUE(IsImmediateOperand("  LDA #<"));
+    ASSERT_TRUE(IsImmediateOperand("  LDA.b #("));
+    ASSERT_TRUE(IsImmediateOperand(".loop: CPX #"));
+    ASSERT_TRUE(IsImmediateOperand("  %Macro(#"));
+
+    ASSERT_TRUE(!IsImmediateOperand("  LDA "));
+    ASSERT_TRUE(!IsImmediateOperand("  JSL "));
+    ASSERT_TRUE(!IsImmediateOperand("  dl "));
+    ASSERT_TRUE(!IsImmediateOperand("  LDA #$10 : STA "));
+    ASSERT_TRUE(!IsImmediateOperand("  %Macro(#$10, "));
+    ASSERT_TRUE(!IsImmediateOperand("  db \"#\", "));
 }

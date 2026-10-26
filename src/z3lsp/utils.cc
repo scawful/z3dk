@@ -130,6 +130,35 @@ fs::path ResolveConfigPath(const std::string& raw,
   return NormalizePath(p);
 }
 
+bool IsImmediateOperand(std::string_view line_prefix) {
+  bool immediate = false;
+  char quote = '\0';
+  for (char c : line_prefix) {
+    if (quote != '\0') {
+      if (c == quote) {
+        quote = '\0';
+      }
+      continue;
+    }
+    switch (c) {
+      case '"':
+      case '\'':
+        quote = c;
+        break;
+      case '#':
+        immediate = true;
+        break;
+      case ',':
+      case ':':
+        immediate = false;
+        break;
+      default:
+        break;
+    }
+  }
+  return immediate;
+}
+
 bool IsSymbolChar(char c) {
   return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' || c == '.' ||
          c == '!' || c == '@';

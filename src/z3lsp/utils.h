@@ -27,6 +27,10 @@ std::filesystem::path ResolveConfigPath(const std::string& raw,
                                         const std::filesystem::path& config_dir,
                                         const std::filesystem::path& workspace_root);
 
+// True when a literal starting right after `line_prefix` belongs to an
+// immediate operand (`#$10`, `#<$1234`, `#($7EF349)`) rather than an address.
+// Commas and statement colons start a new operand.
+bool IsImmediateOperand(std::string_view line_prefix);
 bool IsSymbolChar(char c);
 std::optional<std::string> ExtractTokenAt(const std::string& text, int line, int character);
 std::optional<std::string> ExtractTokenPrefix(const std::string& text, int line, int character);

@@ -17,13 +17,13 @@ jobs:
   build:
     strategy:
       matrix:
-        config: ['windows-msvc-2019']
-        os: ['windows-2019']
-        generator: ['-G "Visual Studio 16 2019"']
-        toolset: ['-T v142']
+        config: ['windows-msvc-2022']
+        os: ['windows-2022']
+        generator: ['-G "Visual Studio 17 2022"']
+        toolset: ['-T v143']
         include:
-          - config: ubuntu-20
-            os: ubuntu-20.04
+          - config: ubuntu-24
+            os: ubuntu-24.04
     runs-on: ${{ matrix.os }}
 
     steps:

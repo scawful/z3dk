@@ -39,6 +39,9 @@
 asar/
 src/asar/res/windows/asar_lib.aps
 !src/asar
+!tests/asar/
+!tests/asar/asar_data/dummy_rom.sfc
+tests/asar/data/
 CMakefiles/
 asar-tests/
 !src/asar-tests

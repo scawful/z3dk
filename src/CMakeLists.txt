@@ -8,7 +8,13 @@ project(z3dk)
 
 # here because the DLL test needs to know its value
 option(ASAR_USE_SANITIZER "Build Asar with ASan and UBSan" OFF)
-option(Z3DK_BUILD_LSP "Build z3lsp (requires C++20)" ON)
+# The Mesen client in z3lsp uses POSIX sockets.
+if(WIN32)
+	set(Z3DK_BUILD_LSP_DEFAULT OFF)
+else()
+	set(Z3DK_BUILD_LSP_DEFAULT ON)
+endif()
+option(Z3DK_BUILD_LSP "Build z3lsp (requires C++20 and POSIX sockets)" ${Z3DK_BUILD_LSP_DEFAULT})
 
 include(CheckCXXCompilerFlag)
 set(Z3DK_HAS_CXX20 ON)

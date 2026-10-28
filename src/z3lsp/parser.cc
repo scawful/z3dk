@@ -591,8 +591,41 @@ std::optional<WorkspaceState> BuildWorkspaceState(const json& params) {
       AddMainCandidatesFromConfig(*state.config, config_path.parent_path(), state.root, &state.main_candidates);
     }
     SeedMainCandidates(state.root, &state.main_candidates);
+    IndexWorkspaceSymbols(&state);
   }
   return state;
+}
+
+void IndexWorkspaceSymbols(WorkspaceState* state) {
+  std::error_code ec;
+  fs::recursive_directory_iterator it(
+      state->root, fs::directory_options::skip_permission_denied, ec);
+  for (; !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+    const auto& entry = *it;
+    if (entry.is_directory(ec)) {
+      // Hidden dirs and nested checkouts (agent worktrees, submodules) would
+      // index the same labels once per copy.
+      const std::string name = entry.path().filename().string();
+      if ((!name.empty() && name[0] == '.') || fs::exists(entry.path() / ".git", ec) ||
+          IsGitIgnoredPath(*state, entry.path())) {
+        it.disable_recursion_pending();
+      }
+      continue;
+    }
+    if (!entry.is_regular_file(ec)) continue;
+    auto ext = entry.path().extension();
+    if (ext != ".asm" && ext != ".s" && ext != ".inc") continue;
+    if (IsGitIgnoredPath(*state, entry.path())) continue;
+    std::ifstream file(entry.path());
+    if (!file.is_open()) continue;
+    std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::string uri = PathToUri(entry.path().string());
+    ParsedFile parsed = ParseFileText(text, uri);
+    for (const auto& sym : parsed.symbols) {
+      state->symbol_names.insert(sym.name);
+    }
+    state->symbol_index[uri] = std::move(parsed.symbols);
+  }
 }
 
 std::vector<std::string> ResolveIncludePaths(const z3dk::Config& config, const fs::path& config_dir) {

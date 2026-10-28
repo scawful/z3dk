@@ -60,6 +60,9 @@ bool PathMatchesDocumentPath(const std::string& candidate_path,
 std::string ExtractMissingLabel(const std::string& message);
 
 std::optional<WorkspaceState> BuildWorkspaceState(const json& params);
+// Fills symbol_index/symbol_names from every non-ignored .asm/.s/.inc under root;
+// workspace/symbol and cross-file completion read only this index.
+void IndexWorkspaceSymbols(WorkspaceState* state);
 std::vector<std::string> ResolveIncludePaths(const z3dk::Config& config, const std::filesystem::path& config_dir);
 bool IsGitIgnoredPath(const WorkspaceState& workspace, const std::filesystem::path& path);
 

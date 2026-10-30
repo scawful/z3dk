@@ -1454,7 +1454,7 @@ void assembleblock(const char * block, int& single_line_for_tracker)
 				{
 					unsigned char c = romdata[snestopc(0x00FFC0 + i)];
 					actual_title += (char)c;
-					// the replacements are from interface-cli.cpp
+					// swap control characters for printable ones so the title can be shown in the error
 					if (c == 7) c = 14;
 					if (c == 8) c = 27;
 					if (c == 9) c = 26;

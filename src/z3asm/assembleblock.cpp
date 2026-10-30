@@ -2335,45 +2335,6 @@ void assembleblock(const char * block, int& single_line_for_tracker)
 		for (int i = start; i < end; i++) write1((unsigned char)data[i]);
 		add_addr_to_line(addrToLinePos);
 	}
-	else if (is("incgfx"))
-	{
-		if (numwords < 2) asar_throw_error(0, error_type_block, error_id_incgfx_too_few_args);
-		string name = safedequote(word[1]);
-		string format = (numwords >= 3) ? word[2] : "4bpp";
-		
-		// Use a temporary file for the conversion
-		string tmp_file = STR".cache/" + name + "." + format + ".bin";
-		
-		// Prototype logic: call python3 scripts/z3asset.py gfx <input> <format> <output>
-		string cmd = string("python3 scripts/z3asset.py gfx \"") + name.data() + "\" " + format.data() + " \"" + tmp_file.data() + "\"";
-		int ret = system(cmd.data());
-		if (ret != 0) asar_throw_error(0, error_type_block, error_id_incgfx_failed, name.data(), "Conversion tool failed");
-
-		int len;
-		char * data;
-		if (!readfile(tmp_file, NULL, &data, &len)) asar_throw_error(0, error_type_block, error_id_incgfx_failed, name.data(), "Could not read converted file");
-		autoptr<char*> datacopy=data;
-		for (int i=0;i<len;i++) write1((unsigned int)data[i]);
-		add_addr_to_line(addrToLinePos);
-	}
-	else if (is("incmsg"))
-	{
-		if (numwords < 2) asar_throw_error(0, error_type_block, error_id_incmsg_too_few_args);
-		string message = safedequote(word[1]);
-		
-		// Call python3 scripts/z3asset.py msg "<text>"
-		string tmp_file = ".cache/msg.bin";
-		string cmd = string("python3 scripts/z3asset.py msg \"") + message.data() + "\" \"" + tmp_file + "\"";
-		int ret = system(cmd.data());
-		if (ret != 0) asar_throw_error(0, error_type_block, error_id_incmsg_failed, "Conversion tool failed");
-
-		int len;
-		char * data;
-		if (!readfile(tmp_file, NULL, &data, &len)) asar_throw_error(0, error_type_block, error_id_incmsg_failed, "Could not read message file");
-		autoptr<char*> datacopy=data;
-		for (int i=0;i<len;i++) write1((unsigned int)data[i]);
-		add_addr_to_line(addrToLinePos);
-	}
 	else if (is("skip") || is("fill"))
 	{
 		if(numwords != 2 && numwords != 3 && numwords != 5) asar_throw_error(0, error_type_block, error_id_unknown_command);

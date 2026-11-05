@@ -191,10 +191,6 @@
 	ERR(hook_invalid_type, "Invalid hook type. Expected JSL or JML.") \
 	ERR(hook_too_many_args, "Too many args passed to hook.") \
 	ERR(hook_too_few_args, "Too few args passed to hook.") \
-	ERR(incgfx_too_few_args, "Too few args passed to incgfx.") \
-	ERR(incgfx_failed, "incgfx failed for file '%s': %s") \
-	ERR(incmsg_too_few_args, "Too few args passed to incmsg.") \
-	ERR(incmsg_failed, "incmsg failed: %s") \
 // this line intentionally left blank
 
 enum asar_error_id : int {

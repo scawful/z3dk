@@ -2,12 +2,12 @@ name: CMake
 
 on:
   push:
-    branches: [ main, master, asar_19, asar_2_beta ]
+    branches: [ main, master ]
     paths-ignore:
       - 'docs/**'
       - 'ext/**'
   pull_request:
-    branches: [ main, master, asar_19, asar_2_beta ]
+    branches: [ main, master ]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)

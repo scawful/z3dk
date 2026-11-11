@@ -1,27 +1,50 @@
-#include <gtest/gtest.h>
-#include "z3dk_core/snes_knowledge_base.h"
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
-using namespace z3dk;
+#include "snes_knowledge_base.h"
 
-TEST(AnnotationBugTest, AnnotatesMirroredBanks) {
-    // Bank $01 is a mirror of $00 for I/O range
-    uint32_t addr_bank01 = 0x012100; 
-    EXPECT_EQ(SnesKnowledgeBase::GetHardwareAnnotation(addr_bank01), "; INIDISP");
+using z3dk::SnesKnowledgeBase;
 
-    // Bank $80 is a mirror
-    uint32_t addr_bank80 = 0x802100;
-    EXPECT_EQ(SnesKnowledgeBase::GetHardwareAnnotation(addr_bank80), "; INIDISP");
+namespace {
 
-    // Bank $81 is a mirror
-    uint32_t addr_bank81 = 0x812100;
-    EXPECT_EQ(SnesKnowledgeBase::GetHardwareAnnotation(addr_bank81), "; INIDISP");
+int failures = 0;
+
+void ExpectAnnotation(uint32_t address, const std::string& expected) {
+    std::string actual = SnesKnowledgeBase::GetHardwareAnnotation(address);
+    if (actual != expected) {
+        std::cerr << "GetHardwareAnnotation($" << std::hex << address << ") = \"" << actual
+                  << "\", expected \"" << expected << "\"\n";
+        ++failures;
+    }
 }
 
-TEST(AnnotationBugTest, DoesNotAnnotateRomBanks) {
-    // Bank $40 is usually HiROM/ExHiROM, not I/O mirror (unless specific mapping)
-    // But standard LoROM/HiROM maps $40-$7D as pure ROM/RAM, no I/O registers at $2100.
-    // I/O is strictly $00-$3F and $80-$BF.
-    
-    uint32_t addr_bank40 = 0x402100;
-    EXPECT_EQ(SnesKnowledgeBase::GetHardwareAnnotation(addr_bank40), "");
+}  // namespace
+
+int main() {
+    // I/O is mirrored in banks $00-$3F and $80-$BF.
+    ExpectAnnotation(0x012100, "; INIDISP");
+    ExpectAnnotation(0x802100, "; INIDISP");
+    ExpectAnnotation(0x812100, "; INIDISP");
+    ExpectAnnotation(0x402100, "");
+
+    ExpectAnnotation(0x002105, "; BGMODE");
+    ExpectAnnotation(0x002140, "; APUIO0");
+    ExpectAnnotation(0x002180, "; WMDATA");
+    ExpectAnnotation(0x004200, "; NMITIMEN");
+    ExpectAnnotation(0x00420B, "; MDMAEN");
+    ExpectAnnotation(0x00420E, "");
+    ExpectAnnotation(0x004218, "; JOY1L");
+
+    ExpectAnnotation(0x004300, "; DMAP0");
+    ExpectAnnotation(0x004312, "; A1T1L");
+    ExpectAnnotation(0x004327, "; DASB2");
+    ExpectAnnotation(0x00437A, "; NTRL7");
+    ExpectAnnotation(0x00437B, "");
+
+    if (failures != 0) {
+        return EXIT_FAILURE;
+    }
+    std::cout << "annotation test: ok\n";
+    return EXIT_SUCCESS;
 }

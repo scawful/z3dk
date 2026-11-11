@@ -7,6 +7,7 @@ import csv
 import re
 import sys
 from pathlib import Path
+from typing import Callable
 
 SYM_LINE = re.compile(r"^([0-9A-Fa-f]{2}:[0-9A-Fa-f]{4})\s+(:)?(\S+)$")
 ASM_LABEL = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_.]*)\s*:")
@@ -14,6 +15,11 @@ STRUCT_START = re.compile(r"^\s*struct\s+([A-Za-z_][A-Za-z0-9_]*)\b", re.IGNOREC
 STRUCT_END = re.compile(r"^\s*endstruct\b", re.IGNORECASE)
 STRUCT_FIELD = re.compile(r"^\s*\.([A-Za-z_][A-Za-z0-9_]*)\s*:")
 USDASM_ADDR = re.compile(r"#_([0-9A-Fa-f]{6})")
+# MoN / Jared Brian style: "; *$10000-$10053 LONG" (ROM file offset) on the line(s) above a routine.
+PC_OFFSET_COMMENT = re.compile(r"^\s*;\s*\*?\$([0-9A-Fa-f]{3,6})(?:\s*-\s*\$[0-9A-Fa-f]{3,6})?(?:\s|$)")
+# Colon must touch the name so chained opcodes like "CLC : XCE" are not labels.
+OFFSET_STYLE_LABEL = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*):(?=\s|$)")
+LOROM_MAX_PC = 0x400000
 NOISY_SYM_PREFIXES = (
     "neg_",
     "pos_",
@@ -215,6 +221,40 @@ def collect_usdasm_labels(root: Path) -> dict[str, dict[str, str]]:
     return labels
 
 
+def pc_to_lorom(pc: int) -> str:
+    return f"${pc // 0x8000:02X}:{(pc % 0x8000) + 0x8000:04X}"
+
+
+def collect_offset_comment_labels(root: Path) -> dict[str, dict[str, str]]:
+    labels: dict[str, dict[str, str]] = {}
+    for path in sorted(root.rglob("*.asm")):
+        if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            rel = path
+        pending: int | None = None
+        with path.open(errors="ignore") as handle:
+            for idx, line in enumerate(handle, 1):
+                offset_match = PC_OFFSET_COMMENT.match(line)
+                if offset_match:
+                    pc = int(offset_match.group(1), 16)
+                    pending = pc if pc < LOROM_MAX_PC else None
+                    continue
+                code = line.split(";", 1)[0]
+                if not code.strip():
+                    continue
+                label_match = OFFSET_STYLE_LABEL.match(code)
+                if label_match:
+                    label = label_match.group(1)
+                    if label not in labels:
+                        address = pc_to_lorom(pending) if pending is not None else ""
+                        labels[label] = {"file": str(rel), "line": str(idx), "address": address}
+                pending = None
+    return labels
+
+
 def newest_mtime(root: Path, patterns: tuple[str, ...]) -> float:
     latest = 0.0
     for pattern in patterns:
@@ -309,18 +349,58 @@ def build_label_index(labels: dict[str, str], asm_labels: dict[str, tuple[str, i
     return rows
 
 
-def build_usdasm_index(usdasm_labels: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+def build_disasm_index(disasm_labels: dict[str, dict[str, str]], source: str) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    for name, meta in usdasm_labels.items():
+    for name, meta in disasm_labels.items():
         rows.append({
             "label": name,
             "address": meta.get("address", ""),
             "file": meta.get("file", ""),
             "line": meta.get("line", ""),
             "source_label": name,
-            "source_repo": "usdasm",
+            "source_repo": source,
         })
     rows.sort(key=lambda r: (r["file"], int(r["line"] or "0")))
+    return rows
+
+
+def load_disasm_labels(
+    root: Path,
+    index_path: Path,
+    source: str,
+    collector: Callable[[Path], dict[str, dict[str, str]]],
+    patterns: tuple[str, ...],
+) -> tuple[dict[str, dict[str, str]], list[dict[str, str]]]:
+    if not root.exists():
+        print(f"[z3dk] {source} root not found: {root}", file=sys.stderr)
+        return {}, []
+    latest = newest_mtime(root, patterns)
+    if index_path.exists() and index_path.stat().st_mtime >= latest:
+        rows = read_csv_rows(index_path)
+        labels: dict[str, dict[str, str]] = {}
+        for row in rows:
+            label = row.get("label", "")
+            if not label:
+                continue
+            labels[label] = {
+                "address": row.get("address", ""),
+                "file": row.get("file", ""),
+                "line": row.get("line", ""),
+            }
+        return labels, rows
+    labels = collector(root)
+    rows = build_disasm_index(labels, source)
+    write_csv(index_path, rows, ["label", "address", "file", "line", "source_label", "source_repo"])
+    return labels, rows
+
+
+def build_style_labels(disasm_labels: dict[str, dict[str, str]], source: str) -> list[dict[str, str]]:
+    rows = [
+        {"address": meta["address"], "label": label, "source": source}
+        for label, meta in disasm_labels.items()
+        if meta.get("address")
+    ]
+    rows.sort(key=lambda r: (r["address"], r["label"]))
     return rows
 
 
@@ -384,6 +464,11 @@ def main() -> int:
     default_index = root / ".context" / "knowledge" / "label_index.csv"
     default_usdasm = Path.home() / "src" / "hobby" / "usdasm"
     default_usdasm_index = root / ".context" / "knowledge" / "label_index_usdasm.csv"
+    default_mon = Path.home() / "src" / "hobby" / "alttp-disassembly"
+    default_mon_index = root / ".context" / "knowledge" / "label_index_mon.csv"
+    default_jared = Path.home() / "src" / "hobby" / "AsarUSALTTPDisassembly"
+    default_jared_index = root / ".context" / "knowledge" / "label_index_jared.csv"
+    default_style_dir = root / ".context" / "knowledge"
     default_all_index = root / ".context" / "knowledge" / "label_index_all.csv"
     default_merged_labels = root / ".context" / "knowledge" / "labels_merged.csv"
 
@@ -394,6 +479,16 @@ def main() -> int:
     parser.add_argument("--out-index", type=Path, default=default_index, help="Output label index CSV.")
     parser.add_argument("--usdasm-root", type=Path, default=default_usdasm, help="USDASM disassembly root.")
     parser.add_argument("--out-usdasm-index", type=Path, default=default_usdasm_index, help="Output USDASM label index CSV.")
+    parser.add_argument("--mon-root", type=Path, default=default_mon, help="MathOnNapkins disassembly root.")
+    parser.add_argument("--out-mon-index", type=Path, default=default_mon_index, help="Output MoN label index CSV.")
+    parser.add_argument("--jared-root", type=Path, default=default_jared, help="Jared Brian AsarUSALTTPDisassembly root.")
+    parser.add_argument("--out-jared-index", type=Path, default=default_jared_index, help="Output Jared Brian label index CSV.")
+    parser.add_argument(
+        "--out-style-dir",
+        type=Path,
+        default=default_style_dir,
+        help="Directory for per-disassembly z3disasm label maps (labels_<style>.csv).",
+    )
     parser.add_argument("--out-all-index", type=Path, default=default_all_index, help="Output combined label index CSV.")
     parser.add_argument("--out-merged-labels", type=Path, default=default_merged_labels, help="Output merged label map CSV.")
     args = parser.parse_args()
@@ -414,28 +509,24 @@ def main() -> int:
     index_rows = build_label_index(labels, asm_labels)
     write_csv(args.out_index, index_rows, ["label", "address", "file", "line", "source_label", "source_repo"])
 
-    usdasm_rows: list[dict[str, str]] = []
-    usdasm_labels: dict[str, dict[str, str]] = {}
-    if args.usdasm_root.exists():
-        usdasm_latest = newest_mtime(args.usdasm_root, ("*.asm", "*.inc"))
-        usdasm_cached = args.out_usdasm_index.exists() and args.out_usdasm_index.stat().st_mtime >= usdasm_latest
-        if usdasm_cached:
-            usdasm_rows = read_csv_rows(args.out_usdasm_index)
-            for row in usdasm_rows:
-                label = row.get("label", "")
-                if not label:
-                    continue
-                usdasm_labels[label] = {
-                    "address": row.get("address", ""),
-                    "file": row.get("file", ""),
-                    "line": row.get("line", ""),
-                }
-        else:
-            usdasm_labels = collect_usdasm_labels(args.usdasm_root)
-            usdasm_rows = build_usdasm_index(usdasm_labels)
-            write_csv(args.out_usdasm_index, usdasm_rows, ["label", "address", "file", "line", "source_label", "source_repo"])
-    else:
-        print(f"[z3dk] USDASM root not found: {args.usdasm_root}", file=sys.stderr)
+    usdasm_labels, usdasm_rows = load_disasm_labels(
+        args.usdasm_root, args.out_usdasm_index, "usdasm", collect_usdasm_labels, ("*.asm", "*.inc")
+    )
+    mon_labels, mon_rows = load_disasm_labels(
+        args.mon_root, args.out_mon_index, "mon", collect_offset_comment_labels, ("*.asm",)
+    )
+    jared_labels, jared_rows = load_disasm_labels(
+        args.jared_root, args.out_jared_index, "jared", collect_offset_comment_labels, ("*.asm",)
+    )
+
+    style_counts: list[tuple[Path, int]] = []
+    for style, style_labels in (("usdasm", usdasm_labels), ("mon", mon_labels), ("jared", jared_labels)):
+        if not style_labels:
+            continue
+        style_path = args.out_style_dir / f"labels_{style}.csv"
+        style_rows = build_style_labels(style_labels, style)
+        write_csv(style_path, style_rows, ["address", "label", "source"])
+        style_counts.append((style_path, len(style_rows)))
 
     all_rows = index_rows + usdasm_rows
     if all_rows:
@@ -449,6 +540,12 @@ def main() -> int:
     if usdasm_rows:
         print(f"[z3dk] usdasm index: {args.out_usdasm_index} ({len(usdasm_rows)} labels)")
         print(f"[z3dk] all index: {args.out_all_index} ({len(all_rows)} labels)")
+    if mon_rows:
+        print(f"[z3dk] mon index: {args.out_mon_index} ({len(mon_rows)} labels)")
+    if jared_rows:
+        print(f"[z3dk] jared index: {args.out_jared_index} ({len(jared_rows)} labels)")
+    for style_path, count in style_counts:
+        print(f"[z3dk] style labels: {style_path} ({count} addressed labels)")
     print(f"[z3dk] merged labels: {args.out_merged_labels} ({len(merged_rows)} labels)")
     return 0
 

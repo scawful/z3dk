@@ -91,6 +91,8 @@ CLI output is quiet by default. Pass `--summary` to show the result/summary line
 # Disassemble bank $02 with symbols
 z3disasm --rom game.sfc --symbols game.mlb --bank-start 02 --bank-end 02 --out src/
 ```
+To name vanilla code with kan's usdasm, MathOnNapkins' or Jared Brian's labels, see
+[`src/z3disasm/README.md`](src/z3disasm/README.md#disassembling-with-kan-mon-or-jared-brian-labels).
 
 **IDE Integration:**
 - **VS Code:** Install the extension in `extensions/vscode-z3dk`.

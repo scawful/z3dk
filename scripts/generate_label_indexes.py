@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Generate Z3DK label overrides and a label -> source index for Oracle of Secrets."""
+"""Generate Z3DK label indexes and z3disasm label maps.
+
+Vanilla disassemblies (kan's usdasm, MathOnNapkins, Jared Brian's AsarUSALTTPDisassembly)
+become labels_<style>.csv files that `z3disasm --labels` accepts. Without --disasm-only the
+script also builds the Oracle of Secrets overrides, index and merged label map.
+"""
 from __future__ import annotations
 
 import argparse
@@ -472,7 +477,7 @@ def main() -> int:
     default_all_index = root / ".context" / "knowledge" / "label_index_all.csv"
     default_merged_labels = root / ".context" / "knowledge" / "labels_merged.csv"
 
-    parser = argparse.ArgumentParser(description="Generate Z3DK label overrides and label index.")
+    parser = argparse.ArgumentParser(description="Generate Z3DK label indexes and z3disasm label maps.")
     parser.add_argument("--sym", type=Path, default=default_sym, help="Path to .sym file.")
     parser.add_argument("--asm-root", type=Path, default=default_asm, help="Oracle asm repo root.")
     parser.add_argument("--out-overrides", type=Path, default=default_overrides, help="Output overrides CSV.")
@@ -491,23 +496,20 @@ def main() -> int:
     )
     parser.add_argument("--out-all-index", type=Path, default=default_all_index, help="Output combined label index CSV.")
     parser.add_argument("--out-merged-labels", type=Path, default=default_merged_labels, help="Output merged label map CSV.")
+    parser.add_argument(
+        "--disasm-only",
+        action="store_true",
+        help="Only index the vanilla disassemblies and write labels_<style>.csv; skip the Oracle of Secrets sym/asm inputs.",
+    )
     args = parser.parse_args()
 
-    if not args.sym.exists():
-        print(f"[z3dk] Missing sym file: {args.sym}", file=sys.stderr)
-        return 1
-    if not args.asm_root.exists():
-        print(f"[z3dk] Missing asm root: {args.asm_root}", file=sys.stderr)
-        return 1
-
-    labels = parse_sym(args.sym)
-    seed_overrides = read_seed_overrides(args.out_overrides)
-    overrides = build_override_labels(labels, seed_overrides)
-    write_csv(args.out_overrides, overrides, ["address", "label", "type", "region", "notes"])
-
-    asm_labels = collect_asm_labels(args.asm_root)
-    index_rows = build_label_index(labels, asm_labels)
-    write_csv(args.out_index, index_rows, ["label", "address", "file", "line", "source_label", "source_repo"])
+    if not args.disasm_only:
+        if not args.sym.exists():
+            print(f"[z3dk] Missing sym file: {args.sym} (use --disasm-only for vanilla label maps)", file=sys.stderr)
+            return 1
+        if not args.asm_root.exists():
+            print(f"[z3dk] Missing asm root: {args.asm_root} (use --disasm-only for vanilla label maps)", file=sys.stderr)
+            return 1
 
     usdasm_labels, usdasm_rows = load_disasm_labels(
         args.usdasm_root, args.out_usdasm_index, "usdasm", collect_usdasm_labels, ("*.asm", "*.inc")
@@ -528,6 +530,27 @@ def main() -> int:
         write_csv(style_path, style_rows, ["address", "label", "source"])
         style_counts.append((style_path, len(style_rows)))
 
+    if not style_counts and args.disasm_only:
+        print("[z3dk] No disassembly roots found; pass --usdasm-root, --mon-root or --jared-root.", file=sys.stderr)
+        return 1
+    for style_path, count in style_counts:
+        print(f"[z3dk] style labels: {style_path} ({count} addressed labels)")
+    if mon_rows:
+        print(f"[z3dk] mon index: {args.out_mon_index} ({len(mon_rows)} labels)")
+    if jared_rows:
+        print(f"[z3dk] jared index: {args.out_jared_index} ({len(jared_rows)} labels)")
+    if args.disasm_only:
+        return 0
+
+    labels = parse_sym(args.sym)
+    seed_overrides = read_seed_overrides(args.out_overrides)
+    overrides = build_override_labels(labels, seed_overrides)
+    write_csv(args.out_overrides, overrides, ["address", "label", "type", "region", "notes"])
+
+    asm_labels = collect_asm_labels(args.asm_root)
+    index_rows = build_label_index(labels, asm_labels)
+    write_csv(args.out_index, index_rows, ["label", "address", "file", "line", "source_label", "source_repo"])
+
     all_rows = index_rows + usdasm_rows
     if all_rows:
         write_csv(args.out_all_index, all_rows, ["label", "address", "file", "line", "source_label", "source_repo"])
@@ -540,12 +563,6 @@ def main() -> int:
     if usdasm_rows:
         print(f"[z3dk] usdasm index: {args.out_usdasm_index} ({len(usdasm_rows)} labels)")
         print(f"[z3dk] all index: {args.out_all_index} ({len(all_rows)} labels)")
-    if mon_rows:
-        print(f"[z3dk] mon index: {args.out_mon_index} ({len(mon_rows)} labels)")
-    if jared_rows:
-        print(f"[z3dk] jared index: {args.out_jared_index} ({len(jared_rows)} labels)")
-    for style_path, count in style_counts:
-        print(f"[z3dk] style labels: {style_path} ({count} addressed labels)")
     print(f"[z3dk] merged labels: {args.out_merged_labels} ({len(merged_rows)} labels)")
     return 0
 

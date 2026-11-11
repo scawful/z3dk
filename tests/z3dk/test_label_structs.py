@@ -33,6 +33,25 @@ def write_disasm_fixtures(root: pathlib.Path) -> tuple[pathlib.Path, pathlib.Pat
         'Pool_Module_MainRouting:\n'
         '    .low  ; $000061\n'
     )
+    write_file(
+        jared_root / 'General' / 'WRAM.asm',
+        'struct WRAM $7E0000\n'
+        '{\n'
+        '    ; $00[0x20] - (Main)\n'
+        '    .Work: skip $20\n'
+        '    ; $20[0x02] - (Player)\n'
+        '    .PlayerYCoord: skip $02\n'
+        '        ; Player\'s Y-Coordinate (mirrored at $0FC4).\n'
+        '    ; $22[0x02] - (Player)\n'
+        '    .PlayerXCoord:\n'
+        '    ; $22[0x01] - (Attract)\n'
+        '    .AttractModule: skip $01s\n'
+        '    ; $24[0x02] - (Dungeon, Overworld)\n'
+        '    .PlayerZCoord: skip $02\n'
+        '    .Work: skip $01\n'
+        '}\n'
+        'endstruct\n'
+    )
     return mon_root, jared_root
 
 
@@ -57,7 +76,32 @@ def assert_style_maps(root: pathlib.Path) -> None:
     mon = style_map(root, 'mon')
     assert mon == {'Intro_SetupScreen': '$02:8000', 'NMI_ReadJoypads': '$00:83D1'}, mon
     jared = style_map(root, 'jared')
-    assert jared == {'Pool_Module_MainRouting': '$00:8061'}, jared
+    assert jared == {
+        'Pool_Module_MainRouting': '$00:8061',
+        'WRAM.Work': '$7E:0000',
+        'WRAM.PlayerYCoord': '$7E:0020',
+        'WRAM.PlayerXCoord': '$7E:0022',
+        'WRAM.AttractModule': '$7E:0022',
+        'WRAM.PlayerZCoord': '$7E:0024',
+    }, jared
+
+    mlb = (root / 'labels_jared.mlb').read_text().splitlines()
+    assert mlb == [
+        'SnesPrgRom:000061:Pool_Module_MainRouting',
+        'SnesWorkRam:0000-001F:WRAM_Work:Main',
+        'SnesWorkRam:0020-0021:WRAM_PlayerYCoord:Player',
+        'SnesWorkRam:0022-0023:WRAM_PlayerXCoord:Player',
+        'SnesWorkRam:0024-0025:WRAM_PlayerZCoord:Dungeon, Overworld',
+    ], mlb
+    assert (root / 'labels_mon.mlb').read_text().splitlines() == [
+        'SnesPrgRom:0003D1:NMI_ReadJoypads',
+        'SnesPrgRom:010000:Intro_SetupScreen',
+    ]
+
+    warnings = (root / 'labels_jared_wram_warnings.txt').read_text()
+    assert "WRAM.AttractModule has unparsable 'skip $01s'" in warnings, warnings
+    assert 'WRAM.PlayerZCoord header says $7E0024 but skips sum to $7E0023' in warnings, warnings
+    assert 'WRAM.Work duplicates line' in warnings, warnings
 
 
 def test_oracle_index_and_style_maps() -> None:

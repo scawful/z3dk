@@ -25,6 +25,11 @@ PC_OFFSET_COMMENT = re.compile(r"^\s*;\s*\*?\$([0-9A-Fa-f]{3,6})(?:\s*-\s*\$[0-9
 # Colon must touch the name so chained opcodes like "CLC : XCE" are not labels.
 OFFSET_STYLE_LABEL = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*):(?=\s|$)")
 LOROM_MAX_PC = 0x400000
+# Jared Brian's General/WRAM.asm: "struct WRAM $7E0000", "; $22[0x02] - (Player)", ".PlayerXCoord: skip $02".
+WRAM_STRUCT_START = re.compile(r"^\s*struct\s+([A-Za-z_][A-Za-z0-9_]*)\s+\$([0-9A-Fa-f]{6})\b")
+WRAM_HEADER = re.compile(r"^\s*;\s*\$([0-9A-Fa-f]{2,6})\[([^\]]*)\]\s*-?\s*(?:\(([^)]*)\))?")
+WRAM_FIELD = re.compile(r"^\s*\.([A-Za-z_][A-Za-z0-9_]*):(?:\s*skip\s+(\S+))?")
+MESEN_INVALID_CHARS = re.compile(r"[^@_a-zA-Z0-9]")
 NOISY_SYM_PREFIXES = (
     "neg_",
     "pos_",
@@ -260,6 +265,125 @@ def collect_offset_comment_labels(root: Path) -> dict[str, dict[str, str]]:
     return labels
 
 
+def parse_asm_number(token: str) -> int | None:
+    token = token.strip()
+    try:
+        if token.startswith("$"):
+            return int(token[1:], 16)
+        if token.lower().startswith("0x"):
+            return int(token[2:], 16)
+        return int(token, 10)
+    except ValueError:
+        return None
+
+
+def format_snes_address(address: int) -> str:
+    return f"${address >> 16:02X}:{address & 0xFFFF:04X}"
+
+
+def collect_struct_wram_labels(path: Path, root: Path) -> tuple[dict[str, dict[str, str]], list[str]]:
+    """Read struct fields; the "; $XX[0xNN] - (Tags)" header wins over summed skips when both exist."""
+    labels: dict[str, dict[str, str]] = {}
+    warnings: list[str] = []
+    rel = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
+    struct_name = ""
+    base = offset = 0
+    header: tuple[int, int | None, str] | None = None
+    with path.open(errors="ignore") as handle:
+        for idx, line in enumerate(handle, 1):
+            if not struct_name:
+                struct_match = WRAM_STRUCT_START.match(line)
+                if struct_match:
+                    struct_name = struct_match.group(1)
+                    base = int(struct_match.group(2), 16)
+                    offset = 0
+                    header = None
+                continue
+            if STRUCT_END.match(line):
+                struct_name = ""
+                continue
+            header_match = WRAM_HEADER.match(line)
+            if header_match:
+                digits = header_match.group(1)
+                value = int(digits, 16)
+                address = value if len(digits) == 6 else base + value
+                header = (address, parse_asm_number(header_match.group(2)), (header_match.group(3) or "").strip())
+                continue
+            field_match = WRAM_FIELD.match(line.split(";", 1)[0])
+            if not field_match:
+                continue
+            name = f"{struct_name}.{field_match.group(1)}"
+            summed = base + offset
+            address, size, tags = header if header else (summed, None, "")
+            if header and header[0] != summed:
+                warnings.append(
+                    f"{rel}:{idx}: {name} header says ${header[0]:06X} but skips sum to ${summed:06X}"
+                )
+                # Resync so one missing skip is reported once, not for every later field.
+                offset = header[0] - base
+            header = None
+            if field_match.group(2):
+                step = parse_asm_number(field_match.group(2))
+                if step is None:
+                    warnings.append(f"{rel}:{idx}: {name} has unparsable 'skip {field_match.group(2)}'")
+                    step = size or 0
+                offset += step
+            if name in labels:
+                warnings.append(f"{rel}:{idx}: {name} duplicates line {labels[name]['line']}")
+                continue
+            labels[name] = {
+                "file": rel,
+                "line": str(idx),
+                "address": format_snes_address(address),
+                "size": str(size or ""),
+                "comment": tags,
+            }
+    return labels, warnings
+
+
+def mesen_label_name(label: str) -> str:
+    name = MESEN_INVALID_CHARS.sub("_", label)
+    return name if re.match(r"[@_a-zA-Z]", name) else f"_{name}"
+
+
+def build_mlb_lines(labels: dict[str, dict[str, str]]) -> list[str]:
+    """Mesen2 .mlb: SnesPrgRom takes a LoROM file offset, SnesWorkRam a $0-$1FFFF offset; one label per address."""
+    entries: list[tuple[str, int, int, str, str]] = []
+    seen_addresses: set[tuple[str, int]] = set()
+    seen_names: set[str] = set()
+    for label, meta in labels.items():
+        address_text = meta.get("address") or ""
+        if not address_text:
+            continue
+        bank_text, low_text = address_text.lstrip("$").split(":")
+        bank, low = int(bank_text, 16), int(low_text, 16)
+        if bank in (0x7E, 0x7F):
+            memory, start = "SnesWorkRam", (bank - 0x7E) * 0x10000 + low
+        elif low >= 0x8000:
+            memory, start = "SnesPrgRom", (bank & 0x7F) * 0x8000 + (low - 0x8000)
+        else:
+            continue
+        name = mesen_label_name(label)
+        if (memory, start) in seen_addresses or name in seen_names:
+            continue
+        seen_addresses.add((memory, start))
+        seen_names.add(name)
+        size = parse_asm_number(meta.get("size") or "") or 1
+        entries.append((memory, start, size, name, meta.get("comment") or ""))
+
+    entries.sort(key=lambda e: (e[0], e[1]))
+    lines: list[str] = []
+    for i, (memory, start, size, name, comment) in enumerate(entries):
+        end = start + size - 1
+        next_start = entries[i + 1][1] if i + 1 < len(entries) and entries[i + 1][0] == memory else None
+        width = 6 if memory == "SnesPrgRom" else 4
+        span = f"{start:0{width}X}"
+        if size > 1 and (next_start is None or next_start > end):
+            span += f"-{end:0{width}X}"
+        lines.append(f"{memory}:{span}:{name}" + (f":{comment}" if comment else ""))
+    return lines
+
+
 def newest_mtime(root: Path, patterns: tuple[str, ...]) -> float:
     latest = 0.0
     for pattern in patterns:
@@ -489,6 +613,12 @@ def main() -> int:
     parser.add_argument("--jared-root", type=Path, default=default_jared, help="Jared Brian AsarUSALTTPDisassembly root.")
     parser.add_argument("--out-jared-index", type=Path, default=default_jared_index, help="Output Jared Brian label index CSV.")
     parser.add_argument(
+        "--jared-wram",
+        type=Path,
+        default=None,
+        help="Jared Brian WRAM struct file (default: <jared-root>/General/WRAM.asm).",
+    )
+    parser.add_argument(
         "--out-style-dir",
         type=Path,
         default=default_style_dir,
@@ -521,20 +651,36 @@ def main() -> int:
         args.jared_root, args.out_jared_index, "jared", collect_offset_comment_labels, ("*.asm",)
     )
 
+    jared_wram: dict[str, dict[str, str]] = {}
+    wram_path = args.jared_wram or args.jared_root / "General" / "WRAM.asm"
+    if jared_labels and wram_path.exists():
+        jared_wram, wram_warnings = collect_struct_wram_labels(wram_path, args.jared_root)
+        print(f"[z3dk] jared WRAM: {wram_path} ({len(jared_wram)} fields)")
+        warnings_path = args.out_style_dir / "labels_jared_wram_warnings.txt"
+        if wram_warnings:
+            warnings_path.parent.mkdir(parents=True, exist_ok=True)
+            warnings_path.write_text("\n".join(wram_warnings) + "\n")
+            print(f"[z3dk] jared WRAM warnings: {warnings_path} ({len(wram_warnings)})")
+        elif warnings_path.exists():
+            warnings_path.unlink()
+
     style_counts: list[tuple[Path, int]] = []
-    for style, style_labels in (("usdasm", usdasm_labels), ("mon", mon_labels), ("jared", jared_labels)):
+    styles = (("usdasm", usdasm_labels), ("mon", mon_labels), ("jared", {**jared_labels, **jared_wram}))
+    for style, style_labels in styles:
         if not style_labels:
             continue
         style_path = args.out_style_dir / f"labels_{style}.csv"
         style_rows = build_style_labels(style_labels, style)
         write_csv(style_path, style_rows, ["address", "label", "source"])
+        mlb_lines = build_mlb_lines(style_labels)
+        style_path.with_suffix(".mlb").write_text("\n".join(mlb_lines) + "\n")
         style_counts.append((style_path, len(style_rows)))
 
     if not style_counts and args.disasm_only:
         print("[z3dk] No disassembly roots found; pass --usdasm-root, --mon-root or --jared-root.", file=sys.stderr)
         return 1
     for style_path, count in style_counts:
-        print(f"[z3dk] style labels: {style_path} ({count} addressed labels)")
+        print(f"[z3dk] style labels: {style_path} (+ .mlb) ({count} addressed labels)")
     if mon_rows:
         print(f"[z3dk] mon index: {args.out_mon_index} ({len(mon_rows)} labels)")
     if jared_rows:

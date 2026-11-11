@@ -27,7 +27,8 @@ z3disasm --rom zelda3.sfc --out disasm/ [--labels labels.csv] [--symbols game.sy
 ## Disassembling with kan, MoN or Jared Brian labels
 
 `scripts/generate_label_indexes.py --disasm-only` reads a vanilla disassembly checkout
-and writes a `labels_<style>.csv` that `--labels` accepts:
+and writes `labels_<style>.csv` (for `z3disasm --labels`) and `labels_<style>.mlb`
+(for the Mesen2 debugger):
 
 | Style | Source | Address source |
 | --- | --- | --- |
@@ -47,6 +48,24 @@ not exist are skipped. For MoN and Jared, only top-level labels that sit directl
 file-offset comment get an address (local `.labels` and un-commented branch labels do not).
 The label index CSV is cached against the checkout's file times, so delete it if you change
 how labels are parsed.
+
+### Jared's WRAM map
+
+For the `jared` style, the fields of `struct WRAM $7E0000` in `General/WRAM.asm` are added as
+`WRAM.<Field>` (override the path with `--jared-wram`). Each field's address comes from its
+`; $XX[0xNN] - (Tags)` header, falling back to the summed `skip` sizes when there is no header.
+Places where the two disagree, duplicate field names and unparsable `skip` operands are listed in
+`labels_jared_wram_warnings.txt`; each line is a spot where assembling the struct would put a
+field at a different address than its header documents.
+
+### Mesen2 labels
+
+`labels_<style>.mlb` uses Mesen2's label format: `SnesPrgRom:<ROM file offset>:Name` and
+`SnesWorkRam:<offset>[-<end>]:Name[:comment]`. Names are sanitized to Mesen's rules
+(`WRAM.PlayerXCoord` becomes `WRAM_PlayerXCoord`), only the first label at each address is kept,
+and Jared's WRAM tags become the label comment. Import it from the debugger, or copy it next to
+the ROM as `<rom name>.mlb`; Mesen2 auto-loads it when no `.sym`/`.dbg` file for that ROM is
+present. Pass the CSV, not the `.mlb`, to z3disasm.
 
 Label CSV format (header row required, extra columns ignored):
 

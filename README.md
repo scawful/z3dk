@@ -17,21 +17,46 @@ Z3DK is a modern toolchain for SNES development, specializing in *The Legend of 
 
 ### 1. Installation
 
-**Build from Source (macOS/Linux):**
+Z3DK requires a C++20 compiler and CMake 3.15 or newer.
+
+**Build from source (macOS/Linux):**
+
 ```bash
 git clone https://github.com/scawful/z3dk.git
 cd z3dk
-mkdir build && cd build
-cmake ..
-make
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 ```
 
-If your compiler lacks C++20, disable the language server with `cmake -DZ3DK_BUILD_LSP=OFF ..`.
+The executables are `build/src/z3asm/bin/z3asm`, `build/bin/z3disasm`,
+and `build/bin/z3lsp`. The language server can be disabled with
+`-DZ3DK_BUILD_LSP=OFF`; the other tools still require C++20.
 
-**Executables:**
-- `build/bin/z3asm`
-- `build/bin/z3disasm`
-- `build/bin/z3lsp`
+**Build from source (Windows x64, Visual Studio 2022):**
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DZ3DK_BUILD_LSP=OFF
+cmake --build build --config Release --target z3asm z3disasm
+```
+
+The executables are `build/src/z3asm/bin/Release/z3asm.exe` and
+`build/bin/Release/z3disasm.exe`. The language server uses POSIX sockets
+and is disabled by default on Windows.
+
+**Prepare a local ZIP:**
+
+```bash
+python3 scripts/package_z3dk.py --source . --build build --version VERSION \
+  --revision FULL_COMMIT_SHA --platform macos-arm64 --output z3dk-local.zip
+```
+
+Use `macos-x86_64`, `linux-x86_64`, `linux-arm64`, or `windows-x64` for the
+matching build. On Windows, use Python and the Release build paths above; the
+ZIP contains the two Windows executables. The macOS/Linux ZIP includes all
+three tools. Each archive includes license notices and a manifest with hashes.
+The revision and platform are caller claims: check the source revision, build
+inputs, binary architecture and dependencies, and run the binaries on the target
+before distributing. The packager refuses to overwrite an existing ZIP.
 
 ### 2. Project Setup (`z3dk.toml`)
 Create a `z3dk.toml` in your project root to configure the assembler. This replaces the need for complex CLI flags.

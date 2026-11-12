@@ -43,6 +43,11 @@ The executables are `build/src/z3asm/bin/Release/z3asm.exe` and
 `build/bin/Release/z3disasm.exe`. The language server uses POSIX sockets
 and is disabled by default on Windows.
 
+The tested Visual Studio 2022 x64 binaries require the Microsoft Visual C++
+Redistributable for Visual Studio 2022 (x64), including the Universal CRT.
+The ZIP does not bundle these runtime DLLs. Check dependencies for each build
+and verify them on the target Windows installation.
+
 **Prepare a local ZIP:**
 
 ```bash

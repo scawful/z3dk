@@ -2,4 +2,4 @@
 set -euo pipefail
 
 # Compatibility wrapper for older docs/tools.
-exec ./tests/scripts/run_tests.sh "$@"
+exec "$(cd "$(dirname "$0")" && pwd)/tests/scripts/run_tests.sh" "$@"

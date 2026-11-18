@@ -334,6 +334,10 @@ z3lsp::DocumentState AnalyzeDocumentFull(const z3lsp::DocumentState& doc,
       lint_options.prohibited_memory_ranges = config.prohibited_memory_ranges;
   }
 
+  // Peephole rules (slot tables, forced .b width, spawn result checks).
+  z3dk::ApplyPeepholeLintConfig(config, &lint_options);
+  lint_options.source_overrides = options.memory_files;
+
   // Parse Assume Hints
   {
     std::stringstream ss(doc.text);

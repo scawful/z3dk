@@ -37,6 +37,12 @@ struct Config {
   std::optional<bool> warn_unauthorized_hook;
   std::optional<bool> warn_stack_balance;
   std::optional<bool> warn_hook_return;
+  std::optional<bool> warn_unindexed_slot_table;
+  std::optional<bool> warn_forced_width_truncation;
+  std::optional<bool> warn_spawn_unchecked;
+  std::vector<MemoryRange> slot_table_ranges;
+  std::vector<MemoryRange> slot_table_exempt;
+  std::vector<std::string> spawn_routines;
 };
 
 Config LoadConfigFile(const std::string& path, std::string* error);

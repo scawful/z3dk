@@ -220,11 +220,14 @@ bool ParseAddress(std::string_view value, uint32_t* out) {
   if (trimmed.empty()) {
     return false;
   }
+  int base = 0;
   if (trimmed.front() == '$') {
+    // `$` always means hex; base 0 would read "$7EF300" as decimal 7.
     trimmed.erase(0, 1);
+    base = 16;
   }
   char* end_ptr = nullptr;
-  unsigned long parsed = std::strtoul(trimmed.c_str(), &end_ptr, 0);
+  unsigned long parsed = std::strtoul(trimmed.c_str(), &end_ptr, base);
   if (end_ptr == trimmed.c_str() || *end_ptr != '\0') {
     return false;
   }
@@ -255,13 +258,35 @@ MemoryRange ParseMemoryRange(std::string_view value) {
   return range;
 }
 
+// Like ParseMemoryRange, but a single address ("$0FA5") is a 1-byte range.
+MemoryRange ParseAddressOrRange(std::string_view value) {
+  std::string s = ParseStringValue(value);
+  auto colon = s.find(':');
+  std::string head = Trim(s.substr(0, colon));
+  if (head.find('-') != std::string::npos) {
+    return ParseMemoryRange(value);
+  }
+  MemoryRange range{0, 0, ""};
+  uint32_t start = 0;
+  if (!ParseAddress(head, &start)) {
+    return range;
+  }
+  range.start = start;
+  range.end = start + 1;
+  if (colon != std::string::npos) {
+    range.reason = Trim(s.substr(colon + 1));
+  }
+  return range;
+}
+
 }  // namespace
 
 bool IsArrayKey(const std::string& key) {
   return key == "include_paths" || key == "defines" || key == "emit" ||
          key == "emits" || key == "main" || key == "main_file" ||
          key == "main_files" || key == "entry" || key == "entry_files" ||
-         key == "prohibited_memory_ranges";
+         key == "prohibited_memory_ranges" || key == "slot_table_ranges" ||
+         key == "slot_table_exempt" || key == "spawn_routines";
 }
 
 void ApplyArrayKey(Config* config, const std::string& key, std::string_view value) {
@@ -282,6 +307,17 @@ void ApplyArrayKey(Config* config, const std::string& key, std::string_view valu
         config->prohibited_memory_ranges.push_back(std::move(range));
       }
     }
+  } else if (key == "slot_table_ranges" || key == "slot_table_exempt") {
+    auto& target = key == "slot_table_ranges" ? config->slot_table_ranges
+                                              : config->slot_table_exempt;
+    for (const auto& item : items) {
+      MemoryRange range = ParseAddressOrRange(item);
+      if (range.end > range.start) {
+        target.push_back(std::move(range));
+      }
+    }
+  } else if (key == "spawn_routines") {
+    config->spawn_routines = std::move(items);
   } else {
     config->main_files = std::move(items);
   }
@@ -387,7 +423,15 @@ Config LoadConfigFile(const std::string& path, std::string* error) {
       config.warn_stack_balance = ParseBool(value);
     } else if (key == "warn_hook_return") {
       config.warn_hook_return = ParseBool(value);
-    } else if (key == "prohibited_memory_ranges") {
+    } else if (key == "warn_unindexed_slot_table") {
+      config.warn_unindexed_slot_table = ParseBool(value);
+    } else if (key == "warn_forced_width_truncation") {
+      config.warn_forced_width_truncation = ParseBool(value);
+    } else if (key == "warn_spawn_unchecked") {
+      config.warn_spawn_unchecked = ParseBool(value);
+    } else if (key == "prohibited_memory_ranges" ||
+               key == "slot_table_ranges" || key == "slot_table_exempt" ||
+               key == "spawn_routines") {
       ApplyArrayKey(&config, key, value);
     }
   }

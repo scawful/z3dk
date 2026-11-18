@@ -789,6 +789,7 @@ int main(int argc, const char* argv[]) {
           if (config.warn_unused_symbols.has_value()) {
             lint_options.warn_unused_symbols = *config.warn_unused_symbols;
           }
+          z3dk::ApplyPeepholeLintConfig(config, &lint_options);
           lint_result = z3dk::RunLint(result, lint_options);
         }
         bool lint_success = lint_result->success() && result.success;
